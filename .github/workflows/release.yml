@@ -1,0 +1,137 @@
+name: Release
+
+# 推 tag（v1.5.4 这种）自动打包双架构 fpk 并挂到 Release 上。
+# 版本号只有一个权威来源：build.sh 里的 VER。tag 与它不一致就直接失败，
+# 避免出现「tag 是 v1.6.0、包名却是 1.5.4」这种发出去才发现的问题。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要打包的 tag（必须已存在，如 v1.5.4）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: 打包 fpk 并发布
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取源码
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          # 手动触发时默认分支可能不含目标 tag，取全量历史与 tag
+          fetch-depth: 0
+
+      - name: 装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+          # 项目零第三方依赖，没有 go.sum，关掉缓存避免 setup-go 反复告警
+          cache: false
+
+      - name: 装 Python + Pillow（build.sh 生成图标用）
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装 Pillow
+        run: python3 -m pip install --upgrade Pillow
+
+      - name: 校验 tag 与 build.sh 版本号一致
+        run: |
+          set -euo pipefail
+          TAG='${{ inputs.tag || github.ref_name }}'
+          VER="${TAG#v}"
+          SH_VER=$(sed -nE 's/^VER="?([^"]+)"?$/\1/p' build.sh | head -1)
+          echo "tag=$TAG  build.sh VER=$SH_VER"
+          if [ -z "$SH_VER" ]; then
+            echo "::error::没能从 build.sh 里读出 VER"
+            exit 1
+          fi
+          if [ "$VER" != "$SH_VER" ]; then
+            echo "::error::tag $TAG 与 build.sh 的 VER=$SH_VER 不一致，请先同步版本号"
+            exit 1
+          fi
+
+      - name: 编译并打包
+        run: bash ./build.sh
+
+      - name: 校验产物
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME#v}"
+          fail=0
+          for plat in x86 arm; do
+            f="dist/fnspeed_${plat}_${VER}.fpk"
+            if [ ! -f "$f" ]; then
+              echo "::error::缺少产物 $f"
+              fail=1
+              continue
+            fi
+            echo "--- $f ($(stat -c%s "$f") 字节) ---"
+
+            # 1. manifest 里的 version / platform 必须是本次构建值
+            man=$(tar xzOf "$f" manifest)
+            got_ver=$(printf '%s\n' "$man" | sed -nE 's/^version[[:space:]]*=[[:space:]]*//p')
+            got_plat=$(printf '%s\n' "$man" | sed -nE 's/^platform[[:space:]]*=[[:space:]]*//p')
+            [ "$got_ver" = "$VER" ] || { echo "::error::$f version=$got_ver，期望 $VER"; fail=1; }
+            [ "$got_plat" = "$plat" ] || { echo "::error::$f platform=$got_plat，期望 $plat"; fail=1; }
+
+            # 2. manifest 声明的 checksum 必须等于 app.tgz 实际 md5。
+            #    用重定向读而不是传文件名：文件名含反斜杠时 md5sum 会在哈希前
+            #    加一个 \ 转义前缀，直接 cut 出来就对不上了
+            want=$(printf '%s\n' "$man" | sed -nE 's/^checksum[[:space:]]*=[[:space:]]*//p')
+            tmp=$(mktemp -d)
+            tar xzf "$f" -C "$tmp" app.tgz
+            real=$(md5sum < "$tmp/app.tgz" | cut -d' ' -f1)
+            [ "$want" = "$real" ] || { echo "::error::$f checksum 不符：manifest=$want 实际=$real"; fail=1; }
+
+            # 3. 包内必需条目齐全，缺任意一项应用中心会报「应用数据包不完整」
+            entries=$(tar tzf "$f" | sed 's|^\./||')
+            for need in manifest app.tgz cmd/main config/privilege config/resource \
+                        ui/config fnspeed.sc ICON.PNG ICON_256.PNG; do
+              printf '%s\n' "$entries" | grep -qx "$need" \
+                || { echo "::error::$f 缺条目 $need"; fail=1; }
+            done
+
+            # 4. app.tgz 里的程序必须是 64 位 ELF。读 magic 而非调 file，
+            #    这样没有 file 命令的环境（Git Bash）也能跑同一套检查
+            ( cd "$tmp" && tar xzf app.tgz )
+            magic=$(head -c 4 "$tmp/fnspeed" | od -An -tx1 | tr -d ' \n')
+            [ "$magic" = "7f454c46" ] \
+              || { echo "::error::$f 内嵌程序不是 ELF（magic=$magic）"; fail=1; }
+            rm -rf "$tmp"
+          done
+          exit $fail
+
+      - name: 发布到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: fnspeed ${{ inputs.tag || github.ref_name }}
+          files: |
+            dist/*.fpk
+          # 已有 Release 时覆盖资产而不是新建
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            双架构 fpk，按 NAS 架构选一个装即可：
+
+            - `fnspeed_x86_*.fpk` — x86_64（N100、J4125、i3 等）
+            - `fnspeed_arm_*.fpk` — arm64（RK3588、M 系列等）
+
+            安装：fnOS 应用中心 → 手动安装 → 选择对应架构的包。
+            装完访问 `http://<NAS-IP>:8976`。
+
+            完整变更见仓库根目录的 CHANGELOG.md，安装细节见 README 第 6 节。

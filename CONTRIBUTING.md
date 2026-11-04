@@ -71,6 +71,24 @@ GOOS=linux GOARCH=amd64 go vet ./...
 注意 `build.sh` 有副作用：会重写 `ICON.PNG` / `ICON_256.PNG` / `ui/icon.png`，
 并往 `sink/` 写一份二进制。提交前用 `git status` 确认没有把意外的图标改动带进来。
 
+## 发版
+
+打 tag 即发版，CI 自动打包并挂到 Release 上（`.github/workflows/release.yml`）：
+
+```bash
+# 1. 改 build.sh 的 VER、manifest 的 version、README 顶部章节
+# 2. 提交后打 tag（必须带 v 前缀，且号码与 VER 完全一致）
+git tag -a v1.5.5 -m "fnspeed 1.5.5"
+git push origin main --tags
+```
+
+tag 与 `build.sh` 的 `VER` 不一致时流程会直接失败，不会产出名字和内容对不上的包。
+workflow 还会独立复核：manifest 的 version/platform、manifest 声明的 checksum 是否
+等于 `app.tgz` 实际 md5、包内必备条目是否齐全、内嵌程序是否为 64 位 ELF。
+
+需要重发某个已有 tag 时，用 Actions 页面的 `workflow_dispatch` 手动指定 tag，
+不要 `git tag -f` 后强推——那样会让别人的克隆里出现分裂历史。
+
 ## 免责
 
 本工具用于**自有或已获明确授权**的链路测速。向未授权的站点施压可能违反当地法律
