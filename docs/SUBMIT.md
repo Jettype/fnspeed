@@ -48,8 +48,9 @@ head -3 CHANGELOG.md                     # 3
 
 ```bash
 bash build.sh
-bash tools/fpk_verify.sh                 # 不存在就按下面手动核
 ```
+
+构建脚本会自己注入 `platform` 与 `checksum`，不要手工改包内的 `manifest`。
 
 手动校验要点，两个包都要过：
 

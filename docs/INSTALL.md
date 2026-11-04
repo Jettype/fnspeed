@@ -200,8 +200,12 @@ bash build.sh
 ## 9. 验收
 
 ```bash
-# 端口
-ss -lntp | grep -E '8976|8977'
+# 端口：必须只看到 127.0.0.1:8976。出现 0.0.0.0:8976 或 *:8976 就是绑错了，
+# 应用中心会判为「监听公网端口」
+ss -lntp | grep 8976
+
+# 网关 socket：对外入口全靠它，不存在就是桌面点不开
+ls -l /var/apps/fnspeed/target/fnspeed.sock
 
 # UI
 curl -s -o /dev/null -w '%{http_code} %{size_download}\n' http://127.0.0.1:8976/

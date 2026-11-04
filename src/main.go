@@ -135,7 +135,7 @@ func main() {
 
 // withBasePath 让服务同时适配两种访问方式：
 //  1. Nginx / App 反代到 /app/fnspeed/ → 剥掉前缀后交给 mux
-//  2. 直连 http://ip:8976/ → 原样交给 mux
+//  2. 本机回环直连 http://127.0.0.1:8976/ → 原样交给 mux
 //
 // 前端一律使用相对路径（api/status），因此两种入口都能正确命中。
 func withBasePath(h http.Handler, base string) http.Handler {

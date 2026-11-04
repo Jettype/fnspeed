@@ -132,6 +132,7 @@ jobs:
             - `fnspeed_arm_*.fpk` — arm64（RK3588、M 系列等）
 
             安装：fnOS 应用中心 → 手动安装 → 选择对应架构的包。
-            装完访问 `http://<NAS-IP>:8976`。
+            装完从桌面「带宽压测」图标进入（走 fnOS 统一网关，手机 App 与 FN Connect 同样可用）。
+            服务只监听 127.0.0.1，不开放端口直连。
 
             完整变更见仓库根目录的 CHANGELOG.md，安装细节见 docs/INSTALL.md。
