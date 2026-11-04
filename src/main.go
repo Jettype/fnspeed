@@ -22,7 +22,7 @@ func main() {
 		port     = flag.Int("port", 8976, "HTTP 监听端口（UI + API，局域网直连用）")
 		sock     = flag.String("sock", "", "Unix Socket 路径（fnOS 统一网关入口，留空则只开 TCP）")
 		dataDir  = flag.String("data-dir", "", "可写数据目录 var/（历史记录）")
-		etcDir   = flag.String("etc-dir", "", "配置目录 etc/（profiles.json 落盘位置）")
+		etcDir   = flag.String("etc-dir", "", "配置目录 etc/（builtin.json / user.json 落盘位置）")
 		basePath = flag.String("base-path", "/app/fnspeed", "fnOS 网关挂载前缀")
 	)
 	flag.Parse()

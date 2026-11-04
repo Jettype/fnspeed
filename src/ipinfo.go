@@ -7,7 +7,7 @@ package main
 //   命中 IP —— 测速目标实际连到了哪台机器，用来判断 CDN 调度到哪个节点
 //
 // 硬性约定（用户红线）：这里拿到的任何 IP 只在内存里短暂存在，
-// 不写日志、不写 history.jsonl、不进 profiles.json、不进 crash.log。
+// 不写日志、不写 history.jsonl、不进 user.json、不进 crash.log。
 // 因此本文件里不允许出现任何把 IP 输出到日志的代码。
 
 import (

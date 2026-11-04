@@ -4,7 +4,7 @@ package main
 //
 // 设计原则：这些参数不跟随单个配置集 —— 换源只换 URL，
 // 并发和时长全局只有一份，改一次所有源都生效，重启后保留。
-// 落盘位置 etc/settings.json，与 profiles.json 分开，
+// 落盘位置 etc/settings.json，与 builtin.json / user.json 分开，
 // 导入配置文件不会覆盖这两个值。
 
 import (

@@ -134,4 +134,4 @@ jobs:
             安装：fnOS 应用中心 → 手动安装 → 选择对应架构的包。
             装完访问 `http://<NAS-IP>:8976`。
 
-            完整变更见仓库根目录的 CHANGELOG.md，安装细节见 README 第 6 节。
+            完整变更见仓库根目录的 CHANGELOG.md，安装细节见 docs/INSTALL.md。
