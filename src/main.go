@@ -19,7 +19,7 @@ var webFS embed.FS
 
 func main() {
 	var (
-		port     = flag.Int("port", 8976, "HTTP 监听端口（UI + API，局域网直连用）")
+		port     = flag.Int("port", 8976, "HTTP 监听端口（UI + API，仅绑定回环地址）")
 		sock     = flag.String("sock", "", "Unix Socket 路径（fnOS 统一网关入口，留空则只开 TCP）")
 		dataDir  = flag.String("data-dir", "", "可写数据目录 var/（历史记录）")
 		etcDir   = flag.String("etc-dir", "", "配置目录 etc/（builtin.json / user.json 落盘位置）")
@@ -83,15 +83,18 @@ func main() {
 
 	handler := withBasePath(mux, *basePath)
 
+	// 只绑回环地址：对外入口一律走 fnOS 统一网关（Unix Socket）。
+	// 应用中心要求「不监听公网端口」，绑 0.0.0.0 会被审核判为不合规；
+	// 回环 + 网关也顺带挡住了局域网内未鉴权访问 API 的路径。
 	srv := &http.Server{
-		Addr:              ":" + itoa(*port),
+		Addr:              "127.0.0.1:" + itoa(*port),
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 
 	go func() {
-		log.Printf("fnspeed 启动，TCP :%d，网关前缀 %s", *port, *basePath)
+		log.Printf("fnspeed 启动，TCP 127.0.0.1:%d，网关前缀 %s", *port, *basePath)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("TCP 监听失败（可能端口被占用）: %v", err)
 		}

@@ -15,13 +15,17 @@
 ## 1. 安装
 
 1. fnOS 应用中心 → 手动安装 → 选择对应架构的 `.fpk`
-2. 安装后访问 `http://<NAS-IP>:8976`，或从桌面「带宽压测」图标进入
+2. 安装后从桌面「带宽压测」图标进入（走 fnOS 统一网关）
 3. 首次打开是空列表（不内置任何压测目标）
+
+> **不再提供 `http://<NAS-IP>:8976` 直连。** 1.5.5 起服务只绑 `127.0.0.1`，对外入口只有网关一条
+> —— 应用中心要求「不监听公网端口」，绑 `0.0.0.0` 无法过审。要在别的机器上调试界面，用
+> `http://<飞牛域名>/app/fnspeed`；要在本机调试，SSH 进去后 `curl http://127.0.0.1:8976/` 照常可用。
 
 手动安装等价命令（调试用）：
 
 ```bash
-mkdir -p /tmp/fpk && tar xzf fnspeed_x86_1.3.0.fpk -C /tmp/fpk
+mkdir -p /tmp/fpk && tar xzf fnspeed_x86_1.5.5.fpk -C /tmp/fpk
 cat /tmp/fpk/manifest          # 核对 appname / platform / service_port
 ```
 
@@ -29,7 +33,12 @@ cat /tmp/fpk/manifest          # 核对 appname / platform / service_port
 
 端口选 **8976**，刻意避开常见的 8876（qBittorrent WebUI 默认占用其同一网段端口）与 8080/8096 等媒体服务端口。
 
-要改端口需同步改四处：`manifest` 的 `service_port`、`fnspeed.sc` 的 `src/dst.ports`、`ui/config` 的 `port`、`cmd/common` 的 `PORT`。
+服务只绑 `127.0.0.1:8976`，因此 `manifest` 里 `checkport = false`、`fnspeed.sc` 里 `port_forward="no"`
+—— 这两项都是给「需要从局域网直连端口」的应用准备的，本项目走网关，不需要，留在开启状态会被审核判为
+「监听公网端口」。
+
+要改端口需同步改三处：`manifest` 的 `service_port`、`fnspeed.sc` 的 `src/dst.ports`、`cmd/common` 的 `PORT`。
+`ui/config` 的 `port` 保持空字符串（网关模式不读这个字段）。
 
 ## 3. 桌面入口：为什么用网关模式
 
@@ -37,7 +46,7 @@ cat /tmp/fpk/manifest          # 核对 appname / platform / service_port
 
 | 模式 | 配置 | 结果 |
 |---|---|---|
-| 端口直连 | `protocol: http` + `port: "8976"` + `url: "/"` | 桌面点开 = 浏览器跳 `http://NAS:8976`。手机 App 内不内嵌；FN Connect 的 HTTPS 页面里嵌 HTTP 会被浏览器按 mixed-content 拦掉 |
+| 端口直连（**本项目未启用**） | `protocol: http` + `port: "8976"` + `url: "/"` | 桌面点开 = 浏览器跳 `http://NAS:8976`。手机 App 内不内嵌；FN Connect 的 HTTPS 页面里嵌 HTTP 会被浏览器按 mixed-content 拦掉。且服务已不监听非回环地址，这条路已走不通 |
 | **统一网关**（本项目） | `protocol: ""`、`port: ""`、`url: "/app/fnspeed"`、`gatewayPrefix`、`gatewaySocket` | 网关把 `/app/fnspeed/*` 从 Unix Socket 转发给应用，复用飞牛域名与登录态，手机 App 内直接内嵌 |
 
 `ui/config` 实际内容：
@@ -72,7 +81,7 @@ cat /tmp/fpk/manifest          # 核对 appname / platform / service_port
 
 服务端配合做了四件事：
 
-- **双通道监听**：TCP `:8976`（局域网直连调试）+ Unix Socket `$TARGET/fnspeed.sock`（网关，权限 0770）。
+- **双通道监听**：TCP `127.0.0.1:8976`（仅回环，供本机调试与 `cmd/common` 的健康探测）+ Unix Socket `$TARGET/fnspeed.sock`（网关，权限 0770）。
 - **前缀剥离**：收到 `/app/fnspeed/api/status` 时剥掉前缀再路由；不带尾斜杠会 301 补斜杠，否则相对路径解析错位。
 - **不加框限制**：不发送 `X-Frame-Options`、不设 CSP `frame-ancestors`。
 - **前端零绝对路径**：所有请求都是 `api/...` 相对路径，挂哪个前缀都能命中。

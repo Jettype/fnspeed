@@ -6,7 +6,7 @@
 set -euo pipefail
 
 APP="fnspeed"
-VER="1.5.4"
+VER="1.5.5"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SRC="$ROOT/src"
 SINK="$ROOT/sink"
@@ -110,4 +110,5 @@ echo "==> 完成"
 ls -lh "$DIST"
 echo
 echo "安装：fnOS 应用中心 → 手动安装 → 选择对应架构的 .fpk"
-echo "访问：http://<NAS-IP>:8976"
+echo "访问：桌面「带宽压测」图标（走 fnOS 统一网关，服务只监听 127.0.0.1）"
+echo "自检：tar xzOf dist/*.fpk app.tgz | tar tzf - | grep ui/config   # 缺了图标点不开"

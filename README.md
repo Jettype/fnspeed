@@ -48,7 +48,10 @@
 
 2. 飞牛应用中心 → 手动安装 → 选包。升级会保留 `user.json`（自建源、隐藏列表）
 3. 装完图标不刷新时执行 `sudo systemctl restart trim_app_center.service`
-4. 浏览器打开 `http://<NAS-IP>:8976`
+4. 从桌面「带宽压测」图标进入（走 fnOS 统一网关，手机 App 与 FN Connect 同样可用）
+
+> 服务只监听 `127.0.0.1:8976`，**没有** `http://<NAS-IP>:8976` 这条直连路径。这是应用中心「不监听公网端口」
+> 的硬要求，也是 1.5.5 上架时改的。
 
 **从源码构建**
 
@@ -67,6 +70,7 @@ bash build.sh
 | 文件 | 内容 |
 |---|---|
 | [docs/INSTALL.md](docs/INSTALL.md) | 安装、桌面入口与网关反代、图标排查、接收端部署、构建与验收 |
+| [docs/SUBMIT.md](docs/SUBMIT.md) | 提交飞牛应用中心：七条硬规则自查、表单字段口径、一次性材料 |
 | [docs/CONFIG.md](docs/CONFIG.md) | 文件树、配置持久化与格式、15 个内置测速源 |
 | [docs/DESIGN.md](docs/DESIGN.md) | 调度策略、定向测速、传输模式、稳定性、已知限制、安全边界 |
 | [CHANGELOG.md](CHANGELOG.md) | 各版本改了什么、为什么改（含已缺失的 1.5.2） |

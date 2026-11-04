@@ -16,7 +16,7 @@ fnspeed/
 ├── manifest                    # appname/version/service_port/checksum
 ├── app.tgz                     # 由 build.sh 生成，解压后落位 target/fnspeed
 ├── build.sh                    # 双架构编译 + 打包（注入 checksum）
-├── fnspeed.sc                  # 防火墙端口规则（8976/8977）
+├── fnspeed.sc                  # 端口声明（仅 8976，port_forward=no：走网关不开端口）
 ├── ICON.PNG / ICON_256.PNG     # 64x64 / 256x256
 ├── cmd/                        # 生命周期脚本（飞牛规范要求 main）
 │   ├── common                  # 公用变量与启停函数
