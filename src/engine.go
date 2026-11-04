@@ -974,12 +974,62 @@ func (e *Engine) downloadOnce(s *stream, st *URLState, client *http.Client, buf 
 
 // ---------------- 上传 ----------------
 
+// errPeerReset 表示「连接建立好了，但对方不接受这个 body」——
+// 413 / 405 / 鉴权拒绝 / Connection: close 后不等 body 就 FIN，全是这个样子。
+//
+// 它必须和普通错误分开：普通错误要按 200ms→5s 指数退避，而这一种在
+// 上传里太常见（server 收够就走），只有「秒断」才需要放慢，正常传完换连不该等。
+var errPeerReset = errors.New("对端关闭了连接")
+
+// uploadLoop 的重连节奏与 downloadLoop 同一套逻辑：
+// 允许快速换连，但对「一次只活了几毫秒」的尝试必须退避。
+//
+// 早先这里在成功路径上直接 continue，一次等待都没有。而 uploadOnce 把
+// EPIPE / ECONNRESET 都当成「正常结束」返回 nil，两者一相接就成了纯握手热循环：
+// 建 TCP → 发头 → 被 FIN → 立刻重来，一个核的 100% 全花在握手上，上行速率是 0。
+// 更糟的是它只记 Reconnects 不记 Failures，调度器的失败风暴保护（burst >= 6）
+// 看不见这种失败，界面上还显示一切正常。
 func (e *Engine) uploadLoop(s *stream) {
 	backoff := 200 * time.Millisecond
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(s.id)))
 	cur := s.st
 
+	// 一次尝试存活不到这个时长，就按「秒断」处理。
+	// 用时长而不是字节数判断：对端在 socket 缓冲区还没撑满时就 RST，
+	// 客户端可能已经塞进去几百 KB，字节数区分不出「秒断」和「传了一会」。
+	const quickReset = 250 * time.Millisecond
+
 	for s.ctx.Err() == nil {
+		start := time.Now()
 		err := e.uploadOnce(s, cur)
+		elapsed := time.Since(start)
+
+		if s.ctx.Err() != nil { // 用户点了停止，不记账也不重连
+			return
+		}
+
+		if errors.Is(err, errPeerReset) {
+			if elapsed < quickReset {
+				cur.Failures.Add(1)
+				e.stats.Failures.Add(1)
+				cur.setErr("连接建立后未传输数据即被断开，已放慢重连")
+				select {
+				case <-s.ctx.Done():
+					return
+				case <-time.After(150*time.Millisecond + time.Duration(rnd.Int63n(int64(100*time.Millisecond)))):
+				}
+				continue
+			}
+			// 传了一会才断：正常换连，只抖开一点，避免多条流同时重连砸出深坑
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-time.After(10*time.Millisecond + time.Duration(rnd.Int63n(int64(70*time.Millisecond)))):
+			}
+			backoff = 200 * time.Millisecond
+			continue
+		}
+
 		if err == nil || errors.Is(err, context.Canceled) {
 			backoff = 200 * time.Millisecond
 			continue
@@ -1073,7 +1123,9 @@ func (e *Engine) uploadOnce(s *stream, st *URLState) error {
 		if errors.As(err, &ne) || errors.Is(err, syscall.EPIPE) || errors.Is(err, os.ErrDeadlineExceeded) {
 			st.Reconnects.Add(1)
 			e.stats.Reconnects.Add(1)
-			return nil
+			// 不返回 nil：nil 在循环里等于「传完了、可以马上换连」，
+			// 而被对端关掉是另一件事，要不要退避由调用方按存活时长决定。
+			return errPeerReset
 		}
 		return err
 	}
