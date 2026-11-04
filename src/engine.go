@@ -18,6 +18,7 @@ import (
 	"net/http/httptrace"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -34,12 +35,41 @@ const (
 	chunkSize        = 32 << 20 // Range 分片 32MB
 	shortFileBytes   = 32 << 20 // 小于这个大小算小文件，爬坡时不给它加流
 	readBufSize      = 256 << 10
-	sockBufSize      = 8 << 20
 	maxFailBeforeRot = 3
 	uploadBodyLen    = int64(8) << 30
 	browserUA        = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
 		"(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+
+// sockBufSize 是手动指定的 socket 收发缓冲（字节）。0 = 不设，交给内核自适应。
+//
+// 早先固定写死 8MB，副作用比收益大：一旦显式设置 SO_RCVBUF / SO_SNDBUF，
+// 内核的自适应调优（tcp_moderate_rcvbuf）就关掉了，窗口从此钉死在申请值上；
+// 而申请值本身还受 net.core.rmem_max 约束，没跑过 tune.go 的机器会被静默压回 208KB
+// —— 也就是说这个「加大缓冲」在非 root 环境下从来没生效过，只是白关了自适应。
+//
+// 千兆内网的 BDP 只有几十 KB，固定 8MB 的收益是让队列更深；
+// 代价是 64 条连接饱和时内核缓冲上限能到 1GB，换来更大的拷贝工作集和内存回收。
+// tune.go 已经把 rmem_max/wmem_max 抬到 16MB，自适应调优会按实际 BDP 自己长，
+// 长肥管道（跨境高 RTT）不会因此被压。
+//
+// 想复核固定值是否更划算：FNSPEED_SOCKBUF=8388608 启动做 A/B。
+var sockBufSize = func() int {
+	v := strings.TrimSpace(os.Getenv("FNSPEED_SOCKBUF"))
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}()
+
+// tlsSessionCache 让重连走会话复用，而不是每次完整握手。
+// 完整握手要验整条证书链，一次几百微秒到几毫秒；随机起点 + 读到文件尾的模式下，
+// 每条流每隔几秒就要换一次连接，64 条流叠起来在弱核上很显眼。
+var tlsSessionCache = tls.NewLRUClientSessionCache(128)
 
 type URLState struct {
 	EP     Endpoint
@@ -1072,7 +1102,10 @@ func (e *Engine) uploadOnce(s *stream, st *URLState) error {
 	defer conn.Close()
 
 	if useTLS {
-		tc := tls.Client(conn, &tls.Config{ServerName: u.Hostname(), InsecureSkipVerify: false})
+		tc := tls.Client(conn, &tls.Config{
+			ServerName:         u.Hostname(),
+			ClientSessionCache: tlsSessionCache, // 重连可复用会话，省掉整条证书链的校验
+		})
 		if err := tc.HandshakeContext(s.ctx); err != nil {
 			return fmt.Errorf("TLS 握手失败（https 上传会先打满 CPU）: %w", err)
 		}
@@ -1156,12 +1189,13 @@ func newDialer() *net.Dialer {
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
 		Control: func(network, address string, c syscall.RawConn) error {
-			_ = c.Control(func(fd uintptr) {
-				_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF, sockBufSize)
-				_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, sockBufSize)
+			return c.Control(func(fd uintptr) {
 				_ = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1)
+				if sockBufSize > 0 {
+					_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF, sockBufSize)
+					_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, sockBufSize)
+				}
 			})
-			return nil
 		},
 	}
 }
@@ -1187,7 +1221,7 @@ func newTransferClient(resolve *pinResolver, region string) *http.Client {
 		DisableKeepAlives:     true,
 		ResponseHeaderTimeout: 20 * time.Second,
 		TLSNextProto:          map[string]func(string, *tls.Conn) http.RoundTripper{},
-		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12, ClientSessionCache: tlsSessionCache},
 	}
 	return &http.Client{
 		Transport: tr,
