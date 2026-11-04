@@ -35,13 +35,14 @@ func newClosingListener(t *testing.T) (net.Listener, *atomic.Int64) {
 	return ln, &accepted
 }
 
-func newUploadEngine(t *testing.T, addr string) (*Engine, *Stats) {
+func newUploadEngine(t *testing.T, addr string, conc int) (*Engine, *Stats) {
 	t.Helper()
 	st := NewStats()
 	st.Reset()
 	p := &Profile{
 		ID:              "upload-backoff",
 		Mode:            "up",
+		Concurrency:     conc,
 		UploadEndpoints: []Endpoint{{URL: "http://" + addr + "/up"}},
 	}
 	e := NewEngine(p, st, "")
@@ -58,7 +59,7 @@ func newUploadEngine(t *testing.T, addr string) (*Engine, *Stats) {
 // 中间空两个数量级，不存在临界抖动。
 func TestUploadLoopBacksOffWhenPeerClosesImmediately(t *testing.T) {
 	ln, accepted := newClosingListener(t)
-	e, _ := newUploadEngine(t, ln.Addr().String())
+	e, _ := newUploadEngine(t, ln.Addr().String(), 0)
 
 	if s := e.AddStream("upload"); s == nil {
 		t.Fatal("没能起上传流，测试前提不成立")
@@ -81,7 +82,7 @@ func TestUploadLoopBacksOffWhenPeerClosesImmediately(t *testing.T) {
 // 会让下载侧的爬坡被永久按在起始并发上，测出来的下载速度严重偏低且不报错。
 func TestUploadQuickResetCountsOnEndpointNotGlobally(t *testing.T) {
 	ln, _ := newClosingListener(t)
-	e, st := newUploadEngine(t, ln.Addr().String())
+	e, st := newUploadEngine(t, ln.Addr().String(), 0)
 
 	if s := e.AddStream("upload"); s == nil {
 		t.Fatal("没能起上传流，测试前提不成立")
@@ -99,5 +100,77 @@ func TestUploadQuickResetCountsOnEndpointNotGlobally(t *testing.T) {
 	}
 	if n := st.Failures.Load(); n != 0 {
 		t.Fatalf("秒断被记进了全局 Failures（%d 次）：会误伤另一个方向的爬坡", n)
+	}
+}
+
+// TestAddStreamHonorsConfiguredCap 守的是「并发填多少就是多少」。
+//
+// 早先 profile.Concurrency 只被写进配置和回显，引擎侧一个引用都没有：
+// AddStream 与调度器都只认编译期常量 maxConcurrency=64，
+// 于是用户填 4、起始 4 条，然后一路爬到带宽拐点 11 条 —— 配置形同虚设。
+func TestAddStreamHonorsConfiguredCap(t *testing.T) {
+	ln, _ := newClosingListener(t)
+	e, _ := newUploadEngine(t, ln.Addr().String(), 4)
+	defer func() { e.Stop("测试结束"); e.wg.Wait() }()
+
+	if got := e.MaxStreams(); got != 4 {
+		t.Fatalf("MaxStreams() = %d，期望 4", got)
+	}
+	added := 0
+	for i := 0; i < 10; i++ {
+		if e.AddStream("upload") != nil {
+			added++
+		}
+	}
+	if added != 4 {
+		t.Fatalf("上限 4，却成功加了 %d 条流", added)
+	}
+	if c := e.StreamCount(); c != 4 {
+		t.Fatalf("StreamCount() = %d，期望 4", c)
+	}
+}
+
+// TestConcurrencyZeroFallsBackToBuiltinCap 守的是「不填 = 不限制」。
+// 0 必须回落到编译期上限，否则默认值一变就会静默压掉吞吐。
+func TestConcurrencyZeroFallsBackToBuiltinCap(t *testing.T) {
+	ln, _ := newClosingListener(t)
+	e, _ := newUploadEngine(t, ln.Addr().String(), 0)
+	defer func() { e.Stop("测试结束"); e.wg.Wait() }()
+
+	if got := e.MaxStreams(); got != maxConcurrency {
+		t.Fatalf("并发为 0 时应回落到 %d，实际 %d", maxConcurrency, got)
+	}
+	added := 0
+	for i := 0; i < 10; i++ {
+		if e.AddStream("upload") != nil {
+			added++
+		}
+	}
+	if added != 10 {
+		t.Fatalf("未设上限时前 10 条应全部成功，实际 %d 条", added)
+	}
+}
+
+// TestStartDoesNotExceedCap 守的是「开局就不能越界」。
+// 起始流数写死 4，上限设成 2 时必须只起 2 条，否则用户一开始就看到超标的数字。
+func TestStartDoesNotExceedCap(t *testing.T) {
+	ln, _ := newClosingListener(t)
+	e, _ := newUploadEngine(t, ln.Addr().String(), 2)
+
+	n := e.Start()
+	e.Stop("测试结束")
+	e.wg.Wait()
+	if e.sched != nil {
+		e.sched.stop()
+	}
+	if e.res != nil {
+		e.res.Stop()
+	}
+
+	if n != 2 {
+		t.Fatalf("上限 2 时开局起了 %d 条流", n)
+	}
+	if c := e.StreamCount(); c > 2 {
+		t.Fatalf("开局流数 %d 超过上限 2", c)
 	}
 }

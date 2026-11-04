@@ -98,7 +98,7 @@ func normalizeProfile(p *Profile) {
 		p.Name = p.ID
 	}
 	if p.Concurrency <= 0 {
-		p.Concurrency = 8
+		p.Concurrency = defaultConcurrency
 	}
 	if p.Concurrency > maxConcurrency {
 		p.Concurrency = maxConcurrency

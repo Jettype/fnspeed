@@ -148,7 +148,7 @@ func (s *scheduler) evaluate(p ratePoint, now time.Time) {
 		// 还没点亮全部源：哪怕这一批没有增益，也再补一条。
 		// 带宽早就饱和时总吞吐不会涨，但用户要看到的是「每条源都参与了」，
 		// 否则列表末尾几条永远 0 字节，看着像挂了一样。
-		if s.e.coverGap() && s.e.StreamCount() < maxConcurrency {
+		if s.e.coverGap() && s.e.StreamCount() < s.e.MaxStreams() {
 			if s.e.AddStream(s.e.pickKind()) != nil {
 				s.baseline = cur
 				s.probing = true
@@ -157,7 +157,7 @@ func (s *scheduler) evaluate(p ratePoint, now time.Time) {
 				return
 			}
 		}
-		if s.noGain >= 2 || n >= maxConcurrency {
+		if s.noGain >= 2 || n >= s.e.MaxStreams() {
 			s.locked = true
 			s.capRate = cur
 			s.e.SetPhase("steady")
@@ -176,7 +176,7 @@ func (s *scheduler) evaluate(p ratePoint, now time.Time) {
 			return
 		}
 
-		if n >= maxConcurrency {
+		if n >= s.e.MaxStreams() {
 			s.locked = true
 			s.capRate = cur
 			s.e.SetPhase("steady")

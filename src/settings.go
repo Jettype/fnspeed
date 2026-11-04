@@ -16,7 +16,9 @@ import (
 )
 
 const (
-	defaultConcurrency = 32 // 激进起步，调度器仍会按收益继续爬坡
+	// 并发是上限而不是起步值：调度器只在这个范围内爬坡，填 4 就最多 4 条。
+	// 默认给到编译期上限，等价于「不主动限制」，与 1.5.6 之前的行为一致。
+	defaultConcurrency = maxConcurrency
 	defaultDurationSec = 60
 	defaultBytesLimit  = 0 // 0 = 不限量
 )

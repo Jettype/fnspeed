@@ -203,7 +203,14 @@ type Engine struct {
 	phase       atomic.Value // string: ramp | steady
 	conc        atomic.Int32 // 当前流数
 	peakStreams atomic.Int32 // 本次运行达到过的最大流数
+	// maxStreams 是本次运行的并发上限，来自配置集 / 全局设置。
+	// 早先这个字段只被写进配置、从没参与调度：填 4 也照样能爬到 11，
+	// 因为 AddStream 和调度器只认编译期常量 maxConcurrency。
+	maxStreams int32
 }
+
+// MaxStreams 是本次运行允许的最大并发流数。
+func (e *Engine) MaxStreams() int { return int(e.maxStreams) }
 
 func NewEngine(p *Profile, st *Stats, region string) *Engine {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -216,6 +223,12 @@ func NewEngine(p *Profile, st *Stats, region string) *Engine {
 	if region != "" {
 		e.resolver = NewPinResolver()
 	}
+	// 并发上限：0 或越界都回落到编译期上限，其余按用户填的执行。
+	ms := maxConcurrency
+	if p != nil && p.Concurrency > 0 && p.Concurrency < maxConcurrency {
+		ms = p.Concurrency
+	}
+	e.maxStreams = int32(ms)
 	e.phase.Store("ramp")
 	return e
 }
@@ -325,7 +338,7 @@ func (e *Engine) pinEndpoint(st *URLState) {
 	st.pin.Store(&pinInfo{ip: ip, region: label})
 }
 
-// Start 起初始流（4 条），并启动调度器、探针与资源采样。返回初始流数。
+// Start 起初始流（默认 4 条，上限更低时按上限），并启动调度器、探针与资源采样。
 func (e *Engine) Start() int {
 	e.stats.Running.Store(true)
 	e.stats.SetPhase("ramp")
@@ -339,7 +352,12 @@ func (e *Engine) Start() int {
 	if kind == "" {
 		return 0
 	}
-	for i := 0; i < initialStreams; i++ {
+	// 起始流数不越过上限：把并发填成 2，开局就只该有 2 条。
+	start := initialStreams
+	if e.MaxStreams() < start {
+		start = e.MaxStreams()
+	}
+	for i := 0; i < start; i++ {
 		if e.AddStream(kind) == nil {
 			break
 		}
@@ -448,7 +466,7 @@ func (e *Engine) AddStream(kind string) *stream {
 	if e.ctx.Err() != nil {
 		return nil
 	}
-	if e.StreamCount() >= maxConcurrency {
+	if e.StreamCount() >= e.MaxStreams() {
 		return nil
 	}
 

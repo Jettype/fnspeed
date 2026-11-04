@@ -6,7 +6,7 @@
 set -euo pipefail
 
 APP="fnspeed"
-VER="1.5.6"
+VER="1.5.7"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SRC="$ROOT/src"
 SINK="$ROOT/sink"
