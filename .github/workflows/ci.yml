@@ -39,10 +39,11 @@ jobs:
       - name: go vet
         run: cd src && GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go vet ./...
 
-      # arm64 只验证能编译；测试只在 runner 原生架构上执行
+      # -short 跳过 TestPinResolveLive（真发 DoH 请求，依赖阿里 DNS 与某个 CDN 域名存活），
+      # 否则偶发网络抖动会让无关改动红。要跑联网用例：go test ./...（不加 -short）
       - name: go test
         if: matrix.goarch == 'amd64'
-        run: cd src && go test ./...
+        run: cd src && go test -short ./...
 
       - name: build main + sink
         run: |
@@ -51,6 +52,29 @@ jobs:
           cd ../sink && CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
             go build -trimpath -ldflags="-s -w" -o /tmp/fnspeed-sink .
           ls -l /tmp/fnspeed /tmp/fnspeed-sink
+
+  privacy:
+    name: 隐私自检
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 邮箱、本机绝对路径、硬编码凭据、个人账号名 → 阻断；私网地址 → 仅提醒
+      - name: 扫描已跟踪文件
+        run: ./tools/check_privacy.sh --tree
+
+      - name: 扫描提交元数据里的真实邮箱
+        run: |
+          set -e
+          # 允许 GitHub noreply 地址，其余真实邮箱一律报警
+          if git log --format='%ae%n%ce' | sort -u | grep -vE '@users\.noreply\.github\.com$' | grep -qE '@'; then
+            echo "提交里出现非 noreply 邮箱："
+            git log --format='%h %an <%ae>' | grep -vE 'noreply\.github\.com' || true
+            exit 1
+          fi
+          echo "提交邮箱均为 noreply，OK"
 
   package:
     name: build.sh 打包完整性
