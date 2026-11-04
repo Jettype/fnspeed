@@ -267,6 +267,10 @@ atomic 自增，1Gbps 下约 1500 次/秒，可以忽略。真正能左右占用
 - `var/crash.log` 有内容 = 有过内部异常，里面带完整堆栈
 - `var/app.log` 里出现「进程退出 rc=…，2 秒后自动重启」= 自愈触发过
 - 两个文件都在 `/var/apps/fnspeed/var/`
+- 怀疑 CPU 占用异常时，加 `-pprof` 启动，然后
+  `go tool pprof -top 'http://127.0.0.1:8976/debug/pprof/profile?seconds=30'`。
+  这个口子默认关闭，且只放行本机回环请求——同一套 mux 还挂在 fnOS 网关的
+  Unix Socket 上，不拦会顺着网关暴露给网页端
 
 ## 9. 已知限制
 

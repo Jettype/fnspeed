@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -24,6 +25,7 @@ func main() {
 		dataDir  = flag.String("data-dir", "", "可写数据目录 var/（历史记录）")
 		etcDir   = flag.String("etc-dir", "", "配置目录 etc/（builtin.json / user.json 落盘位置）")
 		basePath = flag.String("base-path", "/app/fnspeed", "fnOS 网关挂载前缀")
+		prof     = flag.Bool("pprof", false, "开放 /debug/pprof/ 性能剖析入口（排障用，仅本机回环可访问）")
 	)
 	flag.Parse()
 
@@ -63,6 +65,10 @@ func main() {
 
 	mux := http.NewServeMux()
 	app.Register(mux)
+	if *prof {
+		registerPprof(mux)
+		log.Printf("pprof 已开启（仅本机回环）：go tool pprof -top 'http://127.0.0.1:%d/debug/pprof/profile?seconds=30'", *port)
+	}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && r.URL.Path != "/index.html" {
 			http.NotFound(w, r)
@@ -155,6 +161,29 @@ func withBasePath(h http.Handler, base string) http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// registerPprof 挂上性能剖析入口，只在 -pprof 打开时调用。
+//
+// 每个 handler 前面都套了本机回环校验：进程虽然只绑 127.0.0.1，但同一个 mux
+// 还挂在 fnOS 网关的 Unix Socket 上，不拦的话这个口子会顺着网关暴露给网页端。
+// pprof 能看到完整调用栈与堆内容，不该有第二个入口。
+func registerPprof(mux *http.ServeMux) {
+	local := func(h http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil || !net.ParseIP(host).IsLoopback() {
+				http.NotFound(w, r)
+				return
+			}
+			h(w, r)
+		}
+	}
+	mux.HandleFunc("/debug/pprof/", local(pprof.Index))
+	mux.HandleFunc("/debug/pprof/cmdline", local(pprof.Cmdline))
+	mux.HandleFunc("/debug/pprof/profile", local(pprof.Profile))
+	mux.HandleFunc("/debug/pprof/symbol", local(pprof.Symbol))
+	mux.HandleFunc("/debug/pprof/trace", local(pprof.Trace))
 }
 
 func itoa(n int) string {
