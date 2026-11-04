@@ -229,3 +229,33 @@ nload -u M  # 或 iftop
 两边误差应 < 5%。超过说明统计窗口和采样节奏不一致，检查是否开启了压缩或代理。
 
 本机回环实测（8 核容器，6 并发双向）：下行 8.0–10.1 GB/s，上行 5.4–7.6 GB/s，失败 0。
+
+## 10. 临时打开性能剖析（pprof）
+
+排查 CPU / 内存异常时用。默认关闭，且只认本机回环。
+
+```bash
+# 1) 放标记文件。不要直接改 runner.sh —— 每次启动都会重新生成，改了留不住
+sudo touch /var/apps/fnspeed/var/pprof.on
+
+# 2) 到应用中心「停止」再「启动」，然后确认进程真的带上了参数
+ps -eo args | grep '[f]nspeed --port'
+
+# 3) 采 30 秒。NAS 上不用装 Go，存下来拿回本机看
+curl -s -o /tmp/cpu.pprof 'http://127.0.0.1:8976/debug/pprof/profile?seconds=30'
+
+# 4) 用完删掉再重启，口子就关上了
+sudo rm /var/apps/fnspeed/var/pprof.on
+```
+
+本机查看：`go tool pprof -top cpu.pprof`，或者 `-http=:8080` 用浏览器看火焰图。
+
+服务只绑回环，从别的机器访问要过 SSH 隧道：
+
+```bash
+ssh -L 8976:127.0.0.1:8976 <用户>@<NAS>
+# 本地浏览器打开 http://127.0.0.1:8976/debug/pprof/
+```
+
+经 fnOS 网关访问 `/app/fnspeed/debug/pprof/` 会返回 **404**，这是刻意的：同一个 mux
+也挂在网关的 Unix Socket 上，pprof 能读到完整调用栈与堆内容，不该有第二个入口。
