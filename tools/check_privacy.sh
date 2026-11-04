@@ -61,9 +61,10 @@ warn_on() {
 echo "==> 阻断项"
 
 # 邮箱：排除 HTML 里的 @media / @font-face 等 CSS at-rule
+# 例外：docs/SUBMIT.md 里要记官方商务邮箱，那是公开的对接地址，不是个人信息
 block_on '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' \
   "出现邮箱地址" \
-  '@(media|font|keyframes|supports|import)|users\.noreply\.github\.com'
+  '@(media|font|keyframes|supports|import)|users\.noreply\.github\.com|^docs/SUBMIT\.md:[0-9]+:\| 商务合作邮箱'
 
 # 本机绝对路径：Windows 用户目录、Linux 家目录、常见挂载点
 block_on '([A-Za-z]:\\?[Uu]sers|/workspace/|/home/[a-z_][a-z0-9_-]*/|/Users/[a-z]|AppData|/mnt/[a-z]|/vol[0-9])' \
@@ -74,8 +75,10 @@ block_on '(api[_-]?key|secret|passwd|password)["]?\s*[:=]\s*["][^"]{8,}' "疑似
 block_on 'sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' "疑似 API token"
 
 # 个人账号名（go.mod 的模块路径是必需的，放行）
+# 上架飞牛应用中心要求在 manifest 里写明真实维护者与发布者，那是随包公开的应用元数据，
+# 不是本机信息；docs/SUBMIT.md 的「开发者」一栏同理。除这三处外一律阻断。
 block_on 'jettype|sakuta|坂田' "出现个人账号名" \
-  'go\.mod:[0-9]+:module github\.com/jettype/fnspeed'
+  'go\.mod:[0-9]+:module github\.com/jettype/fnspeed|^manifest:[0-9]+:(maintainer|distributor)[[:space:]]|^docs/SUBMIT\.md:[0-9]+:\| 开发者\*'
 
 echo "==> 提醒项"
 
