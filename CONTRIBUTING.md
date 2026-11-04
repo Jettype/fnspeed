@@ -31,15 +31,38 @@ curl -sI -r 0-1023 <URL> | grep -Ei 'content-length|content-range|^HTTP'
 ## 提交前必跑
 
 ```bash
-cd src && go vet ./... && go test ./...
+cd src && go vet ./... && go test -short ./...
 ```
 
-Windows 上直接跑会因 `syscall.SetsockoptInt` 的平台签名差异失败（Linux 是 `int`、
-Windows 是 `syscall.Handle`），这是平台问题不是代码问题。请指定目标平台：
+`-short` 会跳过 `TestPinResolveLive` —— 它真发 DoH 请求，依赖阿里 DNS 与某个 CDN 域名存活，
+网络一抖就让无关改动变红。要跑联网用例就不加 `-short`。
+
+Windows 上这两条都跑不了：`syscall.SetsockoptInt` 的参数在 Linux 是 `int`、Windows 是
+`syscall.Handle`，直接 `go vet ./...` 就报签名不匹配。这是平台差异，不是代码缺陷。
+Windows 上只能做交叉编译检查：
 
 ```bash
 GOOS=linux GOARCH=amd64 go vet ./...
+GOOS=linux GOARCH=amd64 go test -c -o /tmp/fnspeed.test .   # 只能编出来，执行不了
 ```
+
+真正跑测试交给 CI 的 ubuntu runner。
+
+## 测试守着哪些不变量
+
+改调度或统计逻辑时，测试红了先分清是代码错了、还是口径故意变了：
+
+- **稳定值** = 丢掉前 3 秒（`slowStartSec`）与尾部 10% 之后的中位数。改这个等于改
+  「稳定值」的定义，会让历史记录不再可比。
+- **爬坡**：头 4 秒不做决策；加流后等满 4 秒才比较增益（新连接还在慢启动）；增益门槛 5%；
+  连续两轮无增益才锁定拐点。
+- **补偿**：巡航期跌破拐点 75% 才触发，4 秒内不重复；补偿后水位最多砸到 85%，
+  否则下一轮立刻又触发，形成连环补偿。
+- **瞬时速率**必须来自 `Tick` 算好的值，不能在快照里现场差分 —— SSE 紧跟在 `Tick`
+  后面触发，现场差分会撞上 `dt≈0`，商恒等于 0，这就是 1.5.x 那个「累计流量在涨、
+  大号速率一直 0」的根因。
+
+**不要为了让测试通过就改断言**。那些阈值是拿真实家宽跑出来的，改测试等于骗自己。
 
 另外，提交前跑一次隐私自检，确认没把本机路径、邮箱、私网地址或账号名带进来：
 

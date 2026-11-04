@@ -1,5 +1,10 @@
 # fnspeed · 飞牛 fnOS 带宽压测应用
 
+[![Release](https://img.shields.io/github/v/release/Jettype/fnspeed?display_name=tag&sort=semver)](https://github.com/Jettype/fnspeed/releases/latest)
+[![CI](https://github.com/Jettype/fnspeed/actions/workflows/ci.yml/badge.svg)](https://github.com/Jettype/fnspeed/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.21%2B-00ADD8.svg)](https://go.dev)
+
 双向并发带宽压测。Go 单二进制（CGO 关闭、静态链接），前端单页内联，运行时零依赖。
 
 装到飞牛 fnOS 上，用可动态增减的 HTTP 并发流把上行 / 下行链路压满，实时画出速率曲线，
@@ -16,7 +21,15 @@
 
 **装到 NAS（推荐）**
 
-1. 到 [Releases](../../releases) 下载对应架构的 `.fpk`：x86（N100 / J4125 / 多数成品 NAS）或 arm64
+1. 到 **[Releases](https://github.com/Jettype/fnspeed/releases/latest)** 下载对应架构的 `.fpk`：
+
+   | 架构 | 适合的机器 |
+   |---|---|
+   | `fnspeed_x86_*.fpk` | N100 / J4125 / N5095 及多数成品 NAS（x86_64） |
+   | `fnspeed_arm_*.fpk` | 瑞芯微 RK3588 / 树莓派等 arm64 机型 |
+
+   不确定就看 NAS 上的「系统信息 → 处理器架构」，或 `uname -m`（`x86_64` 选 x86，`aarch64` 选 arm）。
+
 2. 飞牛应用中心 → 手动安装 → 选包。升级会保留 `user.json`（自建源、隐藏列表）
 3. 装完图标不刷新时执行 `sudo systemctl restart trim_app_center.service`
 4. 浏览器打开 `http://<NAS-IP>:8976`

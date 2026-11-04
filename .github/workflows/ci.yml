@@ -41,9 +41,10 @@ jobs:
 
       # -short 跳过 TestPinResolveLive（真发 DoH 请求，依赖阿里 DNS 与某个 CDN 域名存活），
       # 否则偶发网络抖动会让无关改动红。要跑联网用例：go test ./...（不加 -short）
+      # -count=1 关掉结果缓存，避免改了代码却复用上次的成功结论
       - name: go test
         if: matrix.goarch == 'amd64'
-        run: cd src && go test -short ./...
+        run: cd src && go test -short -count=1 ./...
 
       - name: build main + sink
         run: |
