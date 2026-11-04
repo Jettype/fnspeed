@@ -41,7 +41,7 @@
 | [CHANGELOG.md](CHANGELOG.md) | 各版本改了什么、为什么改（含已缺失的 1.5.2） |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 硬约束、新增测速源门槛、提交前必跑 |
 | `PLAN-1.5.1.md` | 1.5.1 开工清单，历史文档，留作决策记录 |
-| `sink/README` 见源码注释 | 接收端部署（systemd + nginx 反代示例在正文末尾） |
+| `sink/` | 接收端源码；部署步骤（systemd + nginx 反代示例）见本文件「部署接收端」一节 |
 
 ## 许可
 

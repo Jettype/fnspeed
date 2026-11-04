@@ -6,7 +6,6 @@ dist/
 # 编译出的二进制（build.sh 会往 sink/ 写一份）
 sink/fnspeed-sink
 sink/fnspeed-sink-*
-/sink/sink
 *.exe
 *.test
 *.out

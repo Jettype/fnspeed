@@ -355,7 +355,7 @@ const hitLine = (GS.showHit && u.remoteIp)
 ## 6. 打包发布
 
 ```bash
-cd /workspace/fnspeed && ./build.sh   # 产出 dist/*_1.5.1.fpk
+cd <项目根> && ./build.sh   # 产出 dist/*_1.5.1.fpk
 md5sum dist/*.fpk > dist/fnspeed_1.5.1.md5
 ```
 

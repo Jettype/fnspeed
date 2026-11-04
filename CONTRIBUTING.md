@@ -41,6 +41,16 @@ Windows 是 `syscall.Handle`），这是平台问题不是代码问题。请指�
 GOOS=linux GOARCH=amd64 go vet ./...
 ```
 
+另外，提交前跑一次隐私自检，确认没把本机路径、邮箱、私网地址或账号名带进来：
+
+```bash
+./tools/check_privacy.sh        # 扫暂存区
+./tools/check_privacy.sh --tree # 扫全部已跟踪文件
+```
+
+在 Windows 上编辑过的脚本记得确认可执行位还在（`git ls-files -s build.sh` 应为 `100755`），
+否则 Linux 上 `./build.sh` 会 Permission denied。
+
 ## 版本号要三处同步
 
 `build.sh` 的 `VER` 常量、`manifest` 的 `version`、`README.md` 顶部章节。
