@@ -210,7 +210,15 @@ type Engine struct {
 }
 
 // MaxStreams 是本次运行允许的最大并发流数。
-func (e *Engine) MaxStreams() int { return int(e.maxStreams) }
+//
+// 零值（没走 NewEngine 构造的 Engine）按「不限制」处理，不能回成 0：
+// 上限一旦变成 0，调度器里 `n >= 上限` 会立刻成立，整台引擎一上来就锁死。
+func (e *Engine) MaxStreams() int {
+	if e.maxStreams <= 0 {
+		return maxConcurrency
+	}
+	return int(e.maxStreams)
+}
 
 func NewEngine(p *Profile, st *Stats, region string) *Engine {
 	ctx, cancel := context.WithCancel(context.Background())
