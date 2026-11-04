@@ -2,7 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    # 分支也跑：改 bug 时先在有问题的分支上看到红，再在本分支修到绿，
+    # main 的历史里就不会留下一次「已知会红」的提交。
+    branches: ['**']
     tags: ['v*']
   pull_request:
 
