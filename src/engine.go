@@ -1017,8 +1017,11 @@ var errPeerReset = errors.New("对端关闭了连接")
 // 早先这里在成功路径上直接 continue，一次等待都没有。而 uploadOnce 把
 // EPIPE / ECONNRESET 都当成「正常结束」返回 nil，两者一相接就成了纯握手热循环：
 // 建 TCP → 发头 → 被 FIN → 立刻重来，一个核的 100% 全花在握手上，上行速率是 0。
-// 更糟的是它只记 Reconnects 不记 Failures，调度器的失败风暴保护（burst >= 6）
-// 看不见这种失败，界面上还显示一切正常。
+//
+// 秒断只记在「这条端点」的失败数上，不记全局 Failures —— 那个计数器喂的是
+// 调度器的失败风暴保护（一轮 ≥ 6 次就暂停加流），而它是全局、不分上下行的。
+// 双向模式下上传端点是坏的、下载源是好的时，把它算进全局会让下载侧的爬坡
+// 被永久按在起始并发上，测出来的下载速度严重偏低且不报错 —— 比原来的 bug 更隐蔽。
 func (e *Engine) uploadLoop(s *stream) {
 	backoff := 200 * time.Millisecond
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(s.id)))
@@ -1041,7 +1044,6 @@ func (e *Engine) uploadLoop(s *stream) {
 		if errors.Is(err, errPeerReset) {
 			if elapsed < quickReset {
 				cur.Failures.Add(1)
-				e.stats.Failures.Add(1)
 				cur.setErr("连接建立后未传输数据即被断开，已放慢重连")
 				select {
 				case <-s.ctx.Done():

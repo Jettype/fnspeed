@@ -73,12 +73,13 @@ func TestUploadLoopBacksOffWhenPeerClosesImmediately(t *testing.T) {
 	}
 }
 
-// TestUploadLoopCountsZeroByteResetAsFailure 守的是「调度器的失败保护能不能看见它」。
+// TestUploadQuickResetCountsOnEndpointNotGlobally 守的是「失败该记在谁头上」。
 //
-// 早先 EPIPE 只记 Reconnects、不记 Failures，于是 scheduler 的失败风暴保护
-// （burst >= 6 暂停加流）永远不触发：界面显示一切正常，CPU 却已被握手套满。
-// 一个字节都没发出去就被踢，必须算失败。
-func TestUploadLoopCountsZeroByteResetAsFailure(t *testing.T) {
+// 秒断必须让用户在端点上看得见（每行的红字 + 端点失败数），但**不能**记进全局
+// Failures —— 那个计数器喂的是调度器的失败风暴保护（一轮 ≥ 6 次就暂停加流），
+// 而它是全局的、不分上下行。双向模式下上传端点坏掉、下载源正常时，把它算进全局
+// 会让下载侧的爬坡被永久按在起始并发上，测出来的下载速度严重偏低且不报错。
+func TestUploadQuickResetCountsOnEndpointNotGlobally(t *testing.T) {
 	ln, _ := newClosingListener(t)
 	e, st := newUploadEngine(t, ln.Addr().String())
 
@@ -90,7 +91,13 @@ func TestUploadLoopCountsZeroByteResetAsFailure(t *testing.T) {
 	e.Stop("测试结束")
 	e.wg.Wait()
 
-	if n := st.Failures.Load(); n == 0 {
-		t.Fatal("对端一直秒断，Failures 却是 0：失败保护看不见这种失败")
+	if len(e.ul) != 1 {
+		t.Fatalf("端点表异常：期望 1 条，得到 %d", len(e.ul))
+	}
+	if n := e.ul[0].Failures.Load(); n == 0 {
+		t.Fatal("对端一直秒断，端点的 Failures 却是 0：界面上看不出这条源在失败")
+	}
+	if n := st.Failures.Load(); n != 0 {
+		t.Fatalf("秒断被记进了全局 Failures（%d 次）：会误伤另一个方向的爬坡", n)
 	}
 }
