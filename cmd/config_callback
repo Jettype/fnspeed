@@ -1,0 +1,9 @@
+#!/bin/bash
+# 配置变更后：重新拉起服务
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$CMD_DIR/common"
+
+start_app
+rc=$?
+log "config_callback 完成 rc=$rc"
+exit $rc

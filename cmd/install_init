@@ -1,0 +1,9 @@
+#!/bin/bash
+# 安装前：只准备目录，不做破坏性操作
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$CMD_DIR/common"
+
+mkdir -p "$VAR" "$ETC" "$BASE/home" 2>/dev/null
+chmod 755 "$BASE" 2>/dev/null
+log "install_init 完成"
+exit 0

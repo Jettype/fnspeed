@@ -1,0 +1,8 @@
+# 统一按 LF 入库，避免 Windows 上 checkout 出 CRLF 后 build.sh 与 cmd/ 脚本在 Linux 侧炸掉
+* text=auto eol=lf
+
+# 二进制不参与行尾转换
+*.png binary
+*.PNG binary
+*.fpk binary
+*.tgz binary

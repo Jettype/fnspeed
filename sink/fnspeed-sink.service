@@ -1,0 +1,20 @@
+[Unit]
+Description=fnspeed sink (带宽压测接收端)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# token 放在环境文件里，不要写进 unit
+EnvironmentFile=-/etc/fnspeed/sink.env
+ExecStart=/usr/local/bin/fnspeed-sink -addr :8977 -max-gb 50
+Restart=on-failure
+RestartSec=3
+# 大量 socket 收发，放宽文件描述符
+LimitNOFILE=65535
+# 压测要跑满网卡，不限制 CPU 权重
+Nice=-5
+IOSchedulingClass=best-effort
+
+[Install]
+WantedBy=multi-user.target

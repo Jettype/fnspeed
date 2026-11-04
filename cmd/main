@@ -1,0 +1,29 @@
+#!/bin/bash
+# 运行控制：start / stop / status
+# status 退出码：0 运行中，3 未运行，1 参数错误
+
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$CMD_DIR/common"
+
+case "$1" in
+    start)
+        start_app
+        exit $?
+        ;;
+    stop)
+        stop_app
+        exit $?
+        ;;
+    status)
+        if is_running; then
+            echo "${APPNAME} is running (pid $(cat "$PIDFILE" 2>/dev/null))"
+            exit 0
+        fi
+        echo "${APPNAME} is not running"
+        exit 3
+        ;;
+    *)
+        echo "usage: $0 {start|stop|status}" >&2
+        exit 1
+        ;;
+esac

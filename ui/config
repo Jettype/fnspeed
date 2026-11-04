@@ -1,0 +1,15 @@
+{
+    ".url": {
+        "fnspeed.Application": {
+            "title": "带宽压测",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "protocol": "",
+            "port": "",
+            "url": "/app/fnspeed",
+            "gatewayPrefix": "/app/fnspeed",
+            "gatewaySocket": "fnspeed.sock",
+            "allUsers": true
+        }
+    }
+}

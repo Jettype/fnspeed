@@ -1,0 +1,97 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  test:
+    name: vet + test (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache-dependency-path: src/go.mod
+
+      - name: gofmt
+        run: |
+          cd src
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未格式化："
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: cd src && GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go vet ./...
+
+      # arm64 只验证能编译；测试只在 runner 原生架构上执行
+      - name: go test
+        if: matrix.goarch == 'amd64'
+        run: cd src && go test ./...
+
+      - name: build main + sink
+        run: |
+          cd src  && CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -trimpath -ldflags="-s -w" -o /tmp/fnspeed .
+          cd ../sink && CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -trimpath -ldflags="-s -w" -o /tmp/fnspeed-sink .
+          ls -l /tmp/fnspeed /tmp/fnspeed-sink
+
+  package:
+    name: build.sh 打包完整性
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache-dependency-path: src/go.mod
+
+      - name: 安装 Pillow（build.sh 生成图标需要）
+        run: python3 -m pip install --quiet pillow
+
+      - name: 打包
+        run: ./build.sh
+
+      # 这一条不过，装到 NAS 上就是应用中心点不开
+      - name: 校验 app.tgz 内含 ui/config
+        run: |
+          set -e
+          for arch in amd64 arm64; do
+            if ! tar tzf .build/app-$arch.tgz | grep -qE '^\./(ui/config|target/ui/config)$'; then
+              echo "app-$arch.tgz 里没有 ui/config，装上去会白屏"
+              tar tzf .build/app-$arch.tgz
+              exit 1
+            fi
+          done
+
+      - name: 校验 manifest 版本号已被 build.sh 覆盖
+        run: |
+          set -e
+          for f in dist/*.fpk; do
+            v=$(tar xzOf "$f" manifest | sed -n 's/^version *= *//p')
+            echo "$f -> version=$v"
+            test -n "$v"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fpk
+          path: dist/*.fpk
+          retention-days: 7

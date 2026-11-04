@@ -1,0 +1,20 @@
+#!/bin/bash
+# 升级后：补权限、确保配置文件存在，不覆盖用户数据
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$CMD_DIR/common"
+
+[ -f "$BIN" ] && chmod 755 "$BIN" 2>/dev/null
+
+if [ ! -f "$ETC/profiles.json" ]; then
+    cat >"$ETC/profiles.json" <<'JSON'
+{
+  "format": "PAOMAN_SPEED_TEST_CONFIG",
+  "version": 2,
+  "selectedProfileId": "",
+  "profiles": []
+}
+JSON
+fi
+
+log "upgrade_callback 完成"
+exit 0

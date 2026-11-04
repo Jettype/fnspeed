@@ -1,0 +1,7 @@
+{
+    "port-config": {
+        "protocol-file": "fnspeed.sc"
+    },
+    "systemd-unit": {
+    }
+}

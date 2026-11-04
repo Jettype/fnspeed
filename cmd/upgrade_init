@@ -1,0 +1,8 @@
+#!/bin/bash
+# 升级前：停掉旧进程，保留 var（配置与历史）
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$CMD_DIR/common"
+
+stop_app
+log "upgrade_init 完成"
+exit 0

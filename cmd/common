@@ -1,0 +1,139 @@
+#!/bin/bash
+# fnspeed 生命周期公用定义：供 cmd/ 下各脚本 source
+# 目录优先取 fnOS 注入的 TRIM_* 变量，缺失时回退到脚本相对路径
+
+APPNAME="fnspeed"
+BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGET="${TRIM_APPDEST:-$BASE/target}"
+VAR="${TRIM_PKGVAR:-$BASE/var}"
+ETC="${TRIM_PKGETC:-$BASE/etc}"
+
+BIN="$TARGET/fnspeed"
+PIDFILE="$VAR/fnspeed.pid"
+LOGFILE="$VAR/app.log"
+STOPFLAG="$VAR/stop.flag"
+RUNNER="$VAR/runner.sh"
+SOCK="$TARGET/fnspeed.sock"   # 与 ui/config 的 gatewaySocket 必须一致
+PORT=8976
+
+mkdir -p "$VAR" "$ETC" 2>/dev/null
+
+log() {
+    local msg="[$(date '+%F %T')] $*"
+    echo "$msg" >>"$LOGFILE" 2>/dev/null
+    [ -n "${TRIM_TEMP_LOGFILE:-}" ] && echo "$*" >>"$TRIM_TEMP_LOGFILE" 2>/dev/null
+    return 0
+}
+
+is_running() {
+    local p
+    [ -f "$PIDFILE" ] || return 1
+    p=$(cat "$PIDFILE" 2>/dev/null)
+    [ -n "$p" ] || return 1
+    kill -0 "$p" 2>/dev/null || return 1
+    return 0
+}
+
+port_open() {
+    (exec 3<>"/dev/tcp/127.0.0.1/$PORT") >/dev/null 2>&1
+    return $?
+}
+
+rotate_log() {
+    # 日志超过 5MB 时轮转，只保留一份上一代
+    [ -f "$LOGFILE" ] || return 0
+    local size
+    size=$(stat -c%s "$LOGFILE" 2>/dev/null || echo 0)
+    if [ "${size:-0}" -gt 5242880 ]; then
+        mv -f "$LOGFILE" "$LOGFILE.1" 2>/dev/null
+    fi
+    return 0
+}
+
+# 守护包装：Go 进程异常退出（段错误、被 OOM 杀、未捕获的崩溃）时自动拉起，
+# 连续 5 次仍失败才放弃。停止时先立 stop.flag，避免刚停就被拉回来。
+make_runner() {
+    cat >"$RUNNER" <<EOS
+#!/bin/bash
+BIN="$BIN"
+PORT="$PORT"
+SOCK="$SOCK"
+VAR="$VAR"
+ETC="$ETC"
+VARLOG="$LOGFILE"
+FLAG="$STOPFLAG"
+n=0
+while [ ! -f "\$FLAG" ]; do
+    "\$BIN" --port "\$PORT" --sock "\$SOCK" --data-dir "\$VAR" --etc-dir "\$ETC" \
+        --base-path "/app/$APPNAME" >>"\$VARLOG" 2>&1
+    rc=\$?
+    [ -f "\$FLAG" ] && break
+    n=\$((n + 1))
+    echo "[\$(date '+%F %T')] 进程退出 rc=\$rc，2 秒后自动重启（第 \$n 次）" >>"\$VARLOG"
+    if [ "\$n" -ge 5 ]; then
+        echo "[\$(date '+%F %T')] 连续 5 次异常退出，守护放弃，请查看 crash.log" >>"\$VARLOG"
+        break
+    fi
+    sleep 2
+done
+EOS
+    chmod +x "$RUNNER" 2>/dev/null
+}
+
+start_app() {
+    if is_running; then
+        log "已在运行，pid=$(cat "$PIDFILE" 2>/dev/null)"
+        return 0
+    fi
+    [ -x "$BIN" ] || { log "启动失败：找不到可执行文件 $BIN"; return 1; }
+
+    rm -f "$PIDFILE" "$SOCK" "$STOPFLAG"
+    rotate_log
+    make_runner
+    cd "$TARGET" || return 1
+    setsid bash "$RUNNER" </dev/null >>"$LOGFILE" 2>&1 &
+    echo $! >"$PIDFILE"
+
+    local i=0
+    while [ "$i" -lt 40 ]; do
+        if port_open; then
+            log "已启动，pid=$(cat "$PIDFILE") 端口=$PORT socket=$SOCK（已启用异常自愈）"
+            return 0
+        fi
+        if ! is_running; then
+            log "启动失败：进程已退出，详见 $LOGFILE"
+            return 1
+        fi
+        sleep 0.25
+        i=$((i + 1))
+    done
+    log "启动超时：10 秒内端口 $PORT 未就绪"
+    return 1
+}
+
+stop_app() {
+    if ! is_running; then
+        rm -f "$PIDFILE" "$STOPFLAG"
+        return 0
+    fi
+    local p i=0
+    p=$(cat "$PIDFILE" 2>/dev/null)
+    : >"$STOPFLAG"                       # 先立旗，守护循环看到就不再拉起
+    kill -TERM -- "-$p" 2>/dev/null || kill -TERM "$p" 2>/dev/null
+    while [ "$i" -lt 40 ] && kill -0 "$p" 2>/dev/null; do
+        sleep 0.25
+        i=$((i + 1))
+    done
+    if kill -0 "$p" 2>/dev/null; then
+        kill -9 -- "-$p" 2>/dev/null || kill -9 "$p" 2>/dev/null
+        sleep 0.5
+    fi
+    # 兜住没被进程组带走的残留（例如守护已放弃、Go 仍在跑）
+    if port_open; then
+        pkill -f "$BIN" 2>/dev/null
+        sleep 0.5
+    fi
+    rm -f "$PIDFILE" "$SOCK" "$STOPFLAG"
+    log "已停止"
+    return 0
+}

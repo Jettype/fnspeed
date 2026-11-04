@@ -1,0 +1,31 @@
+#!/bin/bash
+# 安装后：赋权限、初始化空配置、写入内核调优
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$CMD_DIR/common"
+
+# 1. 可执行权限（app.tgz 解压后可能丢掉 x 位）
+[ -f "$BIN" ] && chmod 755 "$BIN" 2>/dev/null
+
+# 2. 配置初始化交给程序自己：首次启动时写入内置测速预设（etc/profiles.json），
+#    这里不预先写空文件，否则会被当成「用户已清空配置」。
+[ -f "$ETC/profiles.json" ] || log "profiles.json 不存在，首次启动将写入内置预设"
+
+# 3. 内核调优：仅安装脚本以 root 运行时写入；失败不阻断安装
+if [ "$(id -u)" = "0" ] && [ -d /etc/sysctl.d ]; then
+    cat >/etc/sysctl.d/99-fnspeed.conf <<'SYSCTL'
+# fnspeed 带宽压测：大窗口 + BBR，由 fnspeed 应用安装时写入
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 262144 16777216
+net.ipv4.tcp_wmem = 4096 262144 16777216
+net.ipv4.tcp_congestion_control = bbr
+SYSCTL
+    modprobe tcp_bbr >/dev/null 2>&1
+    sysctl -q -p /etc/sysctl.d/99-fnspeed.conf >/dev/null 2>&1
+    log "已写入 /etc/sysctl.d/99-fnspeed.conf"
+else
+    log "非 root 安装，跳过 sysctl（可手工执行 README 中的调优命令）"
+fi
+
+log "install_callback 完成"
+exit 0

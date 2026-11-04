@@ -1,0 +1,8 @@
+#!/bin/bash
+# 配置变更前：停服务，避免配置文件被并发写入
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$CMD_DIR/common"
+
+stop_app
+log "config_init 完成"
+exit 0

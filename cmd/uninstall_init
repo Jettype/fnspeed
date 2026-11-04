@@ -1,0 +1,8 @@
+#!/bin/bash
+# 卸载前：停进程，释放端口
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$CMD_DIR/common"
+
+stop_app
+log "uninstall_init 完成"
+exit 0

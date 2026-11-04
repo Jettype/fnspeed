@@ -1,0 +1,34 @@
+# 构建产物
+.build/
+dist/
+*.fpk
+
+# 编译出的二进制（build.sh 会往 sink/ 写一份）
+sink/fnspeed-sink
+sink/fnspeed-sink-*
+/sink/sink
+*.exe
+*.test
+*.out
+
+# 运行时数据：配置与日志绝不应入库（可能含自建源、隐藏列表、出口 IP）
+etc/
+data/
+user.json
+builtin.json
+settings.json
+state.json
+crash.log
+profiles.json.legacy.bak
+
+# Python
+__pycache__/
+*.pyc
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

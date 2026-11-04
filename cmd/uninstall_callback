@@ -1,0 +1,9 @@
+#!/bin/bash
+# 卸载后：sysctl 配置保留（BBR 等可被其他服务复用），仅清理本应用运行时残留
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$CMD_DIR/common"
+
+rm -f "$PIDFILE" 2>/dev/null
+# 历史与配置留在 var，由 fnOS 卸载流程决定是否删除
+log "uninstall_callback 完成"
+exit 0
