@@ -659,6 +659,14 @@ func (e *Engine) StopReason() string {
 // Wait 等所有 worker 退出，然后写历史。
 func (e *Engine) Wait(dataDir string) {
 	e.wg.Wait()
+	// 所有 worker 已退出。若引擎是「自然结束」（wg 归零但 ctx 还活着），必须在这里
+	// 关掉 ctx：scheduler 与 watchStall / watchLimits 都不在 wg 里，它们会继续跑到
+	// 时长上限，中途还能通过 AddStream 再挂上新流 —— 界面上就是「已完成，但累计
+	// 流量还在涨」，而且那时 a.engine 已被置空，任何「停止」都够不着它。
+	e.cancel()
+	// 关掉 ctx 之后再确认一次：万一有流刚好在两次 Wait 之间被补进来，
+	// 它已经被 ctx 掐断，这里等它退干净再往下走。
+	e.wg.Wait()
 	e.stats.Running.Store(false)
 	e.SetPhase("done")
 	e.stats.endAt.Store(time.Now().UnixMilli())

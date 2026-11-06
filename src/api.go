@@ -17,7 +17,13 @@ import (
 )
 
 type App struct {
-	mu         sync.Mutex
+	mu sync.Mutex
+	// startMu 只保护「一个任务从判空到置位」这一段。
+	// 原先的判空在 a.mu 里、置位在另一个临界区，中间隔着 buildProfile，
+	// 两个设备同时点「开始」时都能通过判空，于是同时跑起两个引擎：
+	// 共享同一份 stats（字节数翻倍、平均值虚高），而 a.engine 只记得后一个，
+	// 前一个再也停不掉。
+	startMu    sync.Mutex
 	engine     *Engine
 	stats      *Stats
 	cfg        *Config
@@ -230,6 +236,10 @@ func (a *App) handleStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusMethodNotAllowed, "只接受 POST")
 		return
 	}
+	// 串行化「判空 → 建引擎 → 置位」，避免两个并发请求各自起一个引擎。
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
 	var req startReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体不是合法 JSON")

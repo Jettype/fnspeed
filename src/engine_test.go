@@ -174,3 +174,27 @@ func TestStartDoesNotExceedCap(t *testing.T) {
 		t.Fatalf("开局流数 %d 超过上限 2", c)
 	}
 }
+
+// TestWaitClosesEngine 守的是「Wait 返回之后引擎必死」。
+//
+// Wait 原先只等 wg、不关 ctx。一旦出现「wg 自然归零但 ctx 还活着」的情形，
+// scheduler 与 watchStall 会继续活着，还能通过 AddStream 再挂上新流；
+// 而那时 a.engine 已被置空，任何「停止」都够不着它 ——
+// 界面上就是「已完成，但累计流量一直涨」。
+func TestWaitClosesEngine(t *testing.T) {
+	ln, _ := newClosingListener(t)
+	e, _ := newUploadEngine(t, ln.Addr().String(), 4)
+	if e.AddStream("upload") == nil {
+		t.Fatal("起流失败，测试前提不成立")
+	}
+
+	e.Stop("测试结束")
+	e.Wait("") // dataDir 为空 → 不写历史
+
+	if e.ctx.Err() == nil {
+		t.Fatal("Wait 返回后 ctx 必须已关闭，否则看门狗与调度器会继续活着")
+	}
+	if s := e.AddStream("upload"); s != nil {
+		t.Fatal("引擎已结束，不该还能加流")
+	}
+}

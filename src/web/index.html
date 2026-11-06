@@ -1001,15 +1001,47 @@ function syncHitToggle(){
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m])); }
 
 /* ---------------- SSE ---------------- */
-let es=null, sseAlive=false;
+let es=null, sseAlive=false, lastFrameAt=0, reconnectTimer=null;
+function scheduleReconnect(delay){
+  if(reconnectTimer) return;                     // 已排过就不再排，避免重连风暴
+  reconnectTimer=setTimeout(()=>{ reconnectTimer=null; connect(); }, delay);
+}
 function connect(){
   if(es) es.close();
   es=new EventSource(API.stream);
-  es.onmessage=e=>{ sseAlive=true; try{ render(JSON.parse(e.data)); }catch(err){} };
-  es.onerror=()=>{ sseAlive=false; es.close(); setTimeout(connect, 3000); };
+  es.onmessage=e=>{
+    sseAlive=true; lastFrameAt=Date.now();
+    try{ render(JSON.parse(e.data)); }catch(err){}
+  };
+  es.onerror=()=>{ sseAlive=false; scheduleReconnect(3000); };
 }
 connect();
 fetch(API.status).then(r=>r.json()).then(d=>{ if(!sseAlive) render(d); }).catch(()=>{});
+
+/* 服务端每 500ms 推一帧。手机切后台、WiFi 换 5G 时，EventSource 的半开连接
+   常常不会触发 onerror，页面就永久停在最后一帧 —— 两台设备看到的因此不一样。
+   这里自己盯帧间隔，超过 4 秒没有新帧就主动重建连接。 */
+setInterval(()=>{
+  if(document.hidden) return;                    // 后台时不折腾，回来时会强制刷新
+  if(!lastFrameAt) return;                       // 还没收到过第一帧，交给 onerror
+  if(Date.now()-lastFrameAt > 4000){
+    lastFrameAt=0; sseAlive=false;
+    if(es) es.close();
+    scheduleReconnect(300);
+  }
+}, 2000);
+
+/* 切回页面 / 从后台恢复：立刻要一次最新状态，不等下一帧。 */
+function refreshNow(){
+  fetch(API.status).then(r=>r.json()).then(d=>render(d)).catch(()=>{});
+  if(!sseAlive || !lastFrameAt || Date.now()-lastFrameAt > 2000){
+    lastFrameAt=0; sseAlive=false;
+    if(es) es.close();
+    scheduleReconnect(300);
+  }
+}
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) refreshNow(); });
+window.addEventListener("pageshow", refreshNow);
 
 /* ---------------- 参数 ---------------- */
 let mode="both";

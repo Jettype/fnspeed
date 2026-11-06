@@ -302,3 +302,55 @@ func splitLines(b []byte) []string {
 	}
 	return out
 }
+
+// ---------------- 结束后的定格 ----------------
+
+// TestAvgAndTotalFreezeAfterFinalize 守的是「跑完之后数字不许再动」。
+//
+// 老实现里 Snapshot 用「活的累计字节 ÷ 停表的耗时」现算平均：分母一旦固定，
+// 分子只要再涨一点，平均值就会无上限往上爬，最终出现「平均 3.10 Gbps、
+// 峰值只有 1.01 Gbps」这种物理上不可能的数。总量同理，也不该跟着涨。
+func TestAvgAndTotalFreezeAfterFinalize(t *testing.T) {
+	st := NewStats()
+	st.Reset()
+	st.StartAt = time.Now().Add(-60 * time.Second)
+	st.RecvBytes.Store(int64(60 * 125e6)) // 60s × 125MB/s ≈ 1 Gbps
+	st.peakRecv.Store(200e6)              // 峰值留够余量，确保不会被夹
+	st.Running.Store(false)
+	st.endAt.Store(time.Now().UnixMilli())
+	st.Finalize(4)
+
+	first := st.Snapshot(0, "", nil)
+	if first.AvgRecv <= 0 {
+		t.Fatalf("Finalize 后平均应为正，实际 %d", first.AvgRecv)
+	}
+
+	// 结束后又灌进来 50 GB（模拟没停干净的流），三个数都不许动
+	st.RecvBytes.Add(50 << 30)
+	second := st.Snapshot(0, "", nil)
+
+	if second.AvgRecv != first.AvgRecv {
+		t.Fatalf("结束后平均值变了：%d -> %d", first.AvgRecv, second.AvgRecv)
+	}
+	if second.RecvTotal != first.RecvTotal {
+		t.Fatalf("结束后累计流量变了：%d -> %d", first.RecvTotal, second.RecvTotal)
+	}
+}
+
+// TestAvgNeverExceedsPeak 守的是「平均不可能高于峰值」这条物理约束。
+// 一旦数据源出了问题，宁可在界面显示峰值，也不要把不可能的数摆给用户。
+func TestAvgNeverExceedsPeak(t *testing.T) {
+	st := NewStats()
+	st.Reset()
+	st.StartAt = time.Now().Add(-10 * time.Second)
+	st.RecvBytes.Store(600e9) // 10 秒 600GB：明显不合理
+	st.peakRecv.Store(100e6)
+	st.Running.Store(false)
+	st.endAt.Store(time.Now().UnixMilli())
+	st.Finalize(1)
+
+	snap := st.Snapshot(0, "", nil)
+	if snap.PeakRecv > 0 && snap.AvgRecv > snap.PeakRecv {
+		t.Fatalf("平均 %d 超过峰值 %d：物理上不可能，必须被夹住", snap.AvgRecv, snap.PeakRecv)
+	}
+}

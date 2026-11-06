@@ -87,6 +87,18 @@ type Stats struct {
 	finalized    atomic.Bool
 	streamsFinal atomic.Int32
 
+	// 结束时的平均速率，在 Finalize 里定格。
+	// 不能在 Snapshot 里现算：分母（耗时）停表后不动，分子只要再涨一点，
+	// 平均值就会无上限地往上爬，最后出现「平均 3.10G 而峰值只有 1.01G」这种
+	// 物理上不可能的数。
+	avgRecvFinal atomic.Int64
+	avgSentFinal atomic.Int64
+	avgFinal     atomic.Bool
+	// 结束时的累计流量。健康情况下与实时值相同；一旦结束后还有字节进来
+	// （引擎没收干净），界面上的「累计流量」也不该跟着涨 —— 那些字节不属于本次运行。
+	recvFinal atomic.Int64
+	sentFinal atomic.Int64
+
 	phase atomic.Value // string
 	endAt atomic.Int64 // 停止时刻，毫秒；0 表示未结束
 
@@ -139,6 +151,11 @@ func (s *Stats) Reset() {
 	s.endAt.Store(0)
 	s.steadyRecv.Store(0)
 	s.steadySent.Store(0)
+	s.avgRecvFinal.Store(0)
+	s.avgSentFinal.Store(0)
+	s.avgFinal.Store(false)
+	s.recvFinal.Store(0)
+	s.sentFinal.Store(0)
 	s.mu.Lock()
 	s.lastAt = time.Time{}
 	s.lastRec = 0
@@ -222,6 +239,17 @@ func (s *Stats) Finalize(streams int) {
 	}
 	s.streamsFinal.Store(int32(streams))
 
+	// 先把总量与平均值定格：后面几个分支都可能提前 return，但这两项必须留下。
+	s.recvFinal.Store(s.RecvBytes.Load())
+	s.sentFinal.Store(s.SentBytes.Load())
+	if v := s.endAt.Load(); v > 0 && !s.StartAt.IsZero() {
+		if elapsed := time.UnixMilli(v).Sub(s.StartAt).Seconds(); elapsed > slowStartSec {
+			s.avgRecvFinal.Store(clampToPeak(int64(float64(s.RecvBytes.Load())/elapsed), s.peakRecv.Load()))
+			s.avgSentFinal.Store(clampToPeak(int64(float64(s.SentBytes.Load())/elapsed), s.peakSent.Load()))
+			s.avgFinal.Store(true)
+		}
+	}
+
 	s.ringMu.RLock()
 	rd := s.ring
 	s.ringMu.RUnlock()
@@ -299,6 +327,16 @@ type URLOut struct {
 	PinRegion string `json:"pinRegion,omitempty"`
 }
 
+// clampToPeak 保证「平均不超过峰值」。平均是窗口均值，本来就不可能高于
+// 采样到的最大值；一旦越界，说明统计窗口出了问题，此时宁可显示峰值，
+// 也不要把一个物理上不可能的数字摆到用户面前。
+func clampToPeak(avg, peak int64) int64 {
+	if peak > 0 && avg > peak {
+		return peak
+	}
+	return avg
+}
+
 func (s *Stats) series(limit int) []Sample {
 	s.ringMu.RLock()
 	rd := s.ring
@@ -361,6 +399,18 @@ func (s *Stats) Snapshot(seriesLimit int, stopReason string, urls []URLOut) Snap
 		snap.AvgRecv = int64(float64(rec) / elapsed)
 		snap.AvgSent = int64(float64(sen) / elapsed)
 	}
+	// 结束后一律用 Finalize 定格的数：分母（耗时）已停表，再拿活的总量去除，
+	// 只要还有一丁点字节进来，平均值就会无上限往上爬。
+	if !snap.Running && s.finalized.Load() {
+		snap.RecvTotal = s.recvFinal.Load()
+		snap.SentTotal = s.sentFinal.Load()
+	}
+	if !snap.Running && s.avgFinal.Load() {
+		snap.AvgRecv = s.avgRecvFinal.Load()
+		snap.AvgSent = s.avgSentFinal.Load()
+	}
+	snap.AvgRecv = clampToPeak(snap.AvgRecv, snap.PeakRecv)
+	snap.AvgSent = clampToPeak(snap.AvgSent, snap.PeakSent)
 	return snap
 }
 
