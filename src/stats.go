@@ -70,11 +70,17 @@ func (r *Ring) Snapshot(limit int) []Sample {
 }
 
 type Stats struct {
-	// startAtMs 是本次运行起点（Unix 毫秒），0 表示还没开始。
+	// startAtMs 是本次运行起点（Unix 毫秒）。
 	// 用原子量而不是 time.Time：开始一局时 Reset 会写它，而上一个引擎的
 	// scheduler / watchLimits 可能还没退干净，两边同时读写 time.Time
 	// （三个机器字）会读出半写值，算出来的 elapsed 直接是天文数字。
+	//
+	// started 单独记「有没有设过」，不能拿 startAtMs==0 当哨兵：
+	// 1970-01-01 的 UnixMilli() 正好是 0，单测里 base 就是 time.UnixMilli(0)，
+	// 拿 0 当「未开始」会让 StartAt() 返回公元 1 年，elapsed 变成一万多亿秒，
+	// 慢启动窗口直接失效（稳定值被前 3 秒的峰值带飞）。
 	startAtMs  atomic.Int64
+	started    atomic.Bool
 	RecvBytes  atomic.Int64
 	SentBytes  atomic.Int64
 	Failures   atomic.Int64
@@ -132,15 +138,17 @@ func NewStats() *Stats {
 func (s *Stats) SetPhase(p string) { s.phase.Store(p) }
 
 // SetStartAt 记录本次运行的起点。
-func (s *Stats) SetStartAt(t time.Time) { s.startAtMs.Store(t.UnixMilli()) }
+func (s *Stats) SetStartAt(t time.Time) {
+	s.startAtMs.Store(t.UnixMilli())
+	s.started.Store(true)
+}
 
 // StartAt 返回本次运行的起点，零值表示还没开始。
 func (s *Stats) StartAt() time.Time {
-	ms := s.startAtMs.Load()
-	if ms == 0 {
+	if !s.started.Load() {
 		return time.Time{}
 	}
-	return time.UnixMilli(ms)
+	return time.UnixMilli(s.startAtMs.Load())
 }
 
 func (s *Stats) Phase() string {

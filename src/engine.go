@@ -1268,8 +1268,14 @@ var crlfReplacer = strings.NewReplacer("\r", " ", "\n", " ")
 // （HTTP 请求拆分）。头来自配置集，而配置集是能导入的 —— 别人给的配置
 // 不该有能力构造出第二个请求。
 func safeHeader(k, v string) (string, string, bool) {
+	// CRLF 检查必须在 TrimSpace 之前：先修剪会把 "X-B\r\n" 变成合法的 "X-B"，
+	// 看起来无害，但同样的修剪也让「判断逻辑」依赖「先修剪」这个顺序 ——
+	// 一旦有人调整顺序，尾部换行就会漏进去。直接按原样判，含换行一律丢。
+	if strings.ContainsAny(k, ":\r\n") {
+		return "", "", false
+	}
 	k = strings.TrimSpace(k)
-	if k == "" || strings.ContainsAny(k, ":\r\n") {
+	if k == "" {
 		return "", "", false
 	}
 	if strings.ContainsAny(v, "\r\n") {
