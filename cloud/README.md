@@ -9,15 +9,50 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 ```
 
 填进侧栏「云端源」即可（命令行是 `POST /api/settings` 的 `cloudEndpoint`）。
-现在 23 个配置集 / 79 条端点，全部为 2026-11 实测可用（HTTP 206 + 支持 Range）。
+现在 31 个配置集 / 135 条端点。**标了速度的都是用 fnspeed 自己真跑出来的**（并发 2、8 秒，
+本机出口上限约 400Mbps），不是探活就算过。
 
 | 分组 | 内容 |
 |---|---|
-| 国内 | 腾讯 3 / 阿里 4 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十一源聚合 11 / 厂商大文件 9 / **微软 4 · B站 5 · 字节 1** |
-| 国外 | Cloudflare / OVH / Vultr 日新美德 4 个单节点 / 海外六源聚合 7 / **Vultr 亚太 5 · 欧洲 7 · 美洲 9 · 中东非 2** |
-| 上传 | Cloudflare `__up` / 本机 sink |
+| 国内 | 腾讯 3 / 阿里 4 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十一源聚合 11 / 厂商大文件 9 / 微软 4 · B站 5 · 字节 1 / **米哈游 6 · 大文件补充 4** |
+| 国外 | Cloudflare / OVH / Vultr 单点 4 / 海外六源聚合 7 / Vultr 亚太 5·欧洲 7·美洲 9·中东非 2 / **DataPacket 亚太 3·欧洲 9·北美 7 / 10GB 档 5 / LibreSpeed 11** |
+| 上传 | **LibreSpeed 11** / Cloudflare `__up` / 本机 sink |
 
-三个按厂商单列的新组（2026-11 加）：
+### 实测速度（并发 2，单源）
+
+| 源 | 速度 | 备注 |
+|---|---|---|
+| 绝区零分卷 7.4GB | **402 Mbps** | 字节 CDN，最快的一条 |
+| 王者荣耀 1968MB | 380 Mbps | 只有「自适应」线路可用 |
+| 米哈游原神分卷 10GB | 327 Mbps | 腾讯 COS |
+| 星铁分卷 7.0GB | 269 Mbps | |
+| 学习强国 266MB | 142 Mbps | `latest/` 路径，不随版本变 |
+| WPS 296MB | 119 Mbps | 金山 KS3 |
+| LibreSpeed `garbage.php` | 119 Mbps | 国际源里最快，且能指定大小 |
+| Apple IPSW 2975MB | 54 Mbps | http 明文 |
+| DataPacket 法兰克福 / 香港 | 36 / 26 Mbps | 19 节点全通但普遍慢 |
+| Hivelocity 10GiB | 32 Mbps | |
+| truefilesize 1GB | 7 Mbps | 但 CC0 许可最干净 |
+
+2026-11 第二轮扩充的四个组：
+
+- **米哈游**：原神/星铁/绝区零的 PC 完整包分卷，单卷 7–10GB，够千兆跑满 60 秒不重连。
+  URL 带版本时间戳目录，**游戏更新就失效** —— 用官方 API 拿最新：
+  `hyp-api.mihoyo.com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1&game_ids[]=<id>`
+  （原神 `1Z8W5NHUQb`、星铁 `64kMb5iAWu`、绝区零 `x6znKlJ0xK`）。
+  注意原神 `.001` 会偶发 404（CDN 节点缓存不一致，重试或换卷即可），所以用的是 `.002/.003`
+- **DataPacket/CDN77**：官方测速文件，`{三字码}.download.datapacket.com/10000mb.bin`，
+  单文件 9.5GB，19 个节点全覆盖。**全是 http 明文**，且实测只有 26–36Mbps，靠节点叠加才有意义
+- **LibreSpeed 公共节点**：`garbage.php?ckSize=512` 实时生成 512MB 不可压缩随机流，
+  `no-store` 不缓存——不会出现「同一个文件被 CDN 优化过所以测不准」。不支持 Range，
+  引擎从头读、读完重连，正好是要的持续流。上传侧同一节点换 `empty.php`，
+  PUT/POST 都吃（实测各 200），是除自建 sink 外唯一成规模的上传目标
+- **国内大文件补充**：王者荣耀 1.9GB、学习强国 266MB、WPS 296MB、Apple IPSW 3GB。
+  王者荣耀另三条三网定向域名实测不可用：联通 `ml-dlied4` 解析失败、移动 `cdntips` 哈希子域失败、
+  电信 `csy.tcdnos` 回 **418 风控**（引擎已把 418 识别为「目标端风控拦截」）
+
+
+### 第一轮扩充的三个组（微软 / B站 / 字节）
 
 - **微软**：VS Code Windows 245MB / Linux deb 251MB 走 `update.code.visualstudio.com/latest/...`，
   这个是 302 跳转到当前版本的 CDN 地址，**URL 永久有效**，版本更新不用改清单；

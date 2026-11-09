@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-09.3",
+  "rev": "2026-11-09.5",
   "ttlSec": 21600,
-  "issuedAt": 1794206248,
+  "issuedAt": 1794212079,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "内部测试源，2026-11 实测（新增微软 / B站 / 字节三组，共 10 条大文件）",
+  "notice": "内部测试源，2026-11 实测（米哈游分卷 / DataPacket 全球 / LibreSpeed 下载+上传 / OVH 10GB）",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -362,6 +362,174 @@
       "uploadUrls": [],
       "urlRotate": "sticky",
       "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-mihoyo",
+      "name": "米哈游 · 游戏分卷 · 6源",
+      "downloadUrls": [
+        "https://autopatchcn.yuanshen.com/client_app/download/pc_zip/20250314105313_OcRjEyGXX8Txtqm4/YuanShen_5.5.0.zip.002",
+        "https://autopatchcn.yuanshen.com/client_app/download/pc_zip/20250314105313_OcRjEyGXX8Txtqm4/YuanShen_5.5.0.zip.003",
+        "https://autopatchcn.juequling.com/package_download/op/client_app/download/20260822101115_aoL548kCAqyTM11P/VolumeZip/juequling_3.2.0_AS.zip.001",
+        "https://autopatchcn.juequling.com/package_download/op/client_app/download/20260822101115_aoL548kCAqyTM11P/VolumeZip/juequling_3.2.0_AS.zip.002",
+        "https://autopatchcn.bhsr.com/client/cn/20260703112555_FMCGg2vPuwTaJGyg/PC/download/StarRail_4.4.0.7z.001",
+        "https://autopatchcn.bhsr.com/client/cn/20260703112555_FMCGg2vPuwTaJGyg/PC/download/StarRail_4.4.0.7z.002"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国内",
+      "desc": "原神 5.5.0 每卷 10GB（腾讯 COS）、绝区零 3.2.0 每卷 7.4GB（字节 CDN）、星穹铁道 4.4.0 每卷 7.0GB。单卷就能跑满千兆 60 秒不用重连。实测原神 .001 会偶发 404（CDN 节点缓存不一致，重试或换卷即可），故用 .002/.003。URL 带版本时间戳目录，游戏更新即失效 —— 用官方 API 取最新：hyp-api.mihoyo.com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1&game_ids[]=1Z8W5NHUQb（原神）/64kMb5iAWu（星铁）/x6znKlJ0xK（绝区零）",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-extra",
+      "name": "国内大文件补充 · 4源",
+      "downloadUrls": [
+        "https://dlied4.myapp.com/myapp/1104466820/cos.release-40109/10040714_com.tencent.tmgp.sgame_a2480356_8.2.1.9_F0BvnI.apk",
+        "https://wirelesscdn-download.xuexi.cn/publish/xuexi_android/latest/xuexi_android_10002068.apk",
+        "https://official-package.wpscdn.cn/wps/download/WPS_Setup_X64_22525.exe",
+        "http://updates-http.cdn-apple.com/2019WinterFCS/fullrestores/041-39257/32129B6C-292C-11E9-9E72-4511412B0A59/iPhone_4.7_12.1.4_16D57_Restore.ipsw"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国内",
+      "desc": "王者荣耀安装包 1968MB（腾讯 Lego CDN，自适应线路）、学习强国 APK 266MB（阿里 CDN，latest/ 路径不随版本变）、WPS 296MB（金山 KS3）、Apple IPSW 2975MB（金山/Akamai，http 明文）。王者荣耀另外三条三网定向域名实测不可用：联通 ml-dlied4 解析失败、移动 cdntips 哈希子域失败、电信 csy.tcdnos 回 418 风控",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-dp-apac",
+      "name": "DataPacket 亚太 · 3节点",
+      "downloadUrls": [
+        "http://hkg.download.datapacket.com/10000mb.bin",
+        "http://sgp.download.datapacket.com/10000mb.bin",
+        "http://tyo.download.datapacket.com/10000mb.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "香港 / 新加坡 / 东京（DataPacket/CDN77 官方测速文件，单文件 9.5GB。**http 明文**，走 CDN77 自己的 Anycast，实测 19 个节点全部 206 + 支持 Range）",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-dp-eu",
+      "name": "DataPacket 欧洲 · 9节点",
+      "downloadUrls": [
+        "http://fra.download.datapacket.com/10000mb.bin",
+        "http://ams.download.datapacket.com/10000mb.bin",
+        "http://lon.download.datapacket.com/10000mb.bin",
+        "http://par.download.datapacket.com/10000mb.bin",
+        "http://mad.download.datapacket.com/10000mb.bin",
+        "http://prg.download.datapacket.com/10000mb.bin",
+        "http://sto.download.datapacket.com/10000mb.bin",
+        "http://vie.download.datapacket.com/10000mb.bin",
+        "http://war.download.datapacket.com/10000mb.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "法兰克福 / 阿姆斯特丹 / 伦敦 / 巴黎 / 马德里 / 布拉格 / 斯德哥尔摩 / 维也纳 / 华沙（DataPacket/CDN77 官方测速文件，单文件 9.5GB。**http 明文**，走 CDN77 自己的 Anycast，实测 19 个节点全部 206 + 支持 Range）",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-dp-na",
+      "name": "DataPacket 北美 · 7节点",
+      "downloadUrls": [
+        "http://lax.download.datapacket.com/10000mb.bin",
+        "http://ash.download.datapacket.com/10000mb.bin",
+        "http://nyc.download.datapacket.com/10000mb.bin",
+        "http://chi.download.datapacket.com/10000mb.bin",
+        "http://dal.download.datapacket.com/10000mb.bin",
+        "http://mia.download.datapacket.com/10000mb.bin",
+        "http://atl.download.datapacket.com/10000mb.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "洛杉矶 / 阿什本 / 纽约 / 芝加哥 / 达拉斯 / 迈阿密 / 亚特兰大（DataPacket/CDN77 官方测速文件，单文件 9.5GB。**http 明文**，走 CDN77 自己的 Anycast，实测 19 个节点全部 206 + 支持 Range）",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-10g",
+      "name": "国际 10GB 档 · 5源",
+      "downloadUrls": [
+        "https://gra.proof.ovh.net/files/10Gb.dat",
+        "https://hil.proof.ovh.us/files/10Gb.dat",
+        "https://vin.proof.ovh.us/files/10Gb.dat",
+        "https://speedtest.fra1.hivelocity.net/10GiB.file",
+        "https://cdn.truefilesize.com/test/test-1gb.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "OVH 格拉茨/俄勒冈/弗吉尼亚各 10GB（实测 32–36Mbps 级）、Hivelocity 法兰克福 10GiB、truefilesize 1GB（CC0 公共领域，明确声明可用于带宽饱和测试）。OVH 新加坡那条实测 0Mbps 已剔除",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "up-librespeed",
+      "name": "LibreSpeed 公共上传 · 11节点",
+      "downloadUrls": [],
+      "uploadUrls": [
+        "https://ams.speedtest.clouvider.net/backend/empty.php",
+        "https://atl.speedtest.clouvider.net/backend/empty.php",
+        "https://fra.speedtest.clouvider.net/backend/empty.php",
+        "https://lon.speedtest.clouvider.net/backend/empty.php",
+        "https://la.speedtest.clouvider.net/backend/empty.php",
+        "https://nyc.speedtest.clouvider.net/backend/empty.php",
+        "https://amsspeed.sharktech.net/backend/empty.php",
+        "https://chispeed.sharktech.net/backend/empty.php",
+        "https://denspeed.sharktech.net/backend/empty.php",
+        "https://lasspeed.sharktech.net/backend/empty.php",
+        "https://laxspeed.sharktech.net/backend/empty.php"
+      ],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "上传",
+      "desc": "LibreSpeed 官方 servers.php 里的 Clouvider 6 节点 + Sharktech 5 节点，empty.php 语义就是「读完丢弃」，PUT/POST 都接受（实测各 200），不需要账号。官方要求后端接受 20MB POST，但实测 512KB 也正常。这是目前除自建 sink 外唯一成规模的上传目标",
+      "mode": "up",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-librespeed",
+      "name": "LibreSpeed 公共下载 · 11节点",
+      "downloadUrls": [
+        "https://ams.speedtest.clouvider.net/backend/garbage.php?ckSize=512",
+        "https://atl.speedtest.clouvider.net/backend/garbage.php?ckSize=512",
+        "https://fra.speedtest.clouvider.net/backend/garbage.php?ckSize=512",
+        "https://lon.speedtest.clouvider.net/backend/garbage.php?ckSize=512",
+        "https://la.speedtest.clouvider.net/backend/garbage.php?ckSize=512",
+        "https://nyc.speedtest.clouvider.net/backend/garbage.php?ckSize=512",
+        "https://amsspeed.sharktech.net/backend/garbage.php?ckSize=512",
+        "https://chispeed.sharktech.net/backend/garbage.php?ckSize=512",
+        "https://denspeed.sharktech.net/backend/garbage.php?ckSize=512",
+        "https://lasspeed.sharktech.net/backend/garbage.php?ckSize=512",
+        "https://laxspeed.sharktech.net/backend/garbage.php?ckSize=512"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover",
+      "desc": "garbage.php?ckSize=512 服务端实时生成 512MB 不可压缩随机流，no-store + keep-alive，不缓存也就不会「下载同一个文件被 CDN 优化」。实测单条 119Mbps，比 DataPacket 快 4 倍。不支持 Range（返回 200 全量），引擎会从头读、读完重连，正好是压测想要的持续流。ckSize 上限 1024MB"
     },
     {
       "id": "up-cf",
