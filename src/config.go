@@ -151,6 +151,62 @@ func mergeEndpoints(urls []string, eps []Endpoint) []Endpoint {
 	return out
 }
 
+// maxEndpointURLLen 限制单条端点地址的长度。
+// 正常 CDN 直链在 200–500 字符，签名串偶尔到 1500；4096 足够，同时挡住
+// 「把整个文件当 URL 贴进来」这种输入。
+const maxEndpointURLLen = 4096
+
+// checkEndpointURL 校验一条端点地址是否可压测：必须 http/https 且带主机名。
+//
+// 卡在 scheme 上不是为了拦 SSRF（这是压测工具，用户本来就要指定目标），
+// 而是为了让失败发生在请求之前：
+//   - 下载侧 http.Client 遇到 file:// 直接抛 "unsupported protocol scheme"，
+//     用户看到的是一句英文，还会被当成「源挂了」；
+//   - 上传侧更糟，它绕开 http.Client 自己拼 socket，非 https 的 scheme 一律按
+//     :80 明文连，ftp://host/path 会变成向 host:80 发 PUT，谁也不知道发生了什么。
+func checkEndpointURL(raw string) error {
+	if raw == "" {
+		return fmt.Errorf("URL 为空")
+	}
+	if len(raw) > maxEndpointURLLen {
+		return fmt.Errorf("URL 超过 %d 字符", maxEndpointURLLen)
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("URL 无法解析")
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+	case "":
+		return fmt.Errorf("缺少 http:// 或 https://")
+	default:
+		return fmt.Errorf("只支持 http/https，实际是 %s://", u.Scheme)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("缺少主机名")
+	}
+	return nil
+}
+
+// firstBadEndpoint 返回第一处不合法的端点地址及其原因，全部合法时返回空串。
+func firstBadEndpoint(p *Profile) (string, string) {
+	if p == nil {
+		return "", ""
+	}
+	scan := func(list []Endpoint) (string, string) {
+		for _, ep := range list {
+			if err := checkEndpointURL(ep.URL); err != nil {
+				return ep.URL, err.Error()
+			}
+		}
+		return "", ""
+	}
+	if bad, why := scan(p.DownloadEndpoints); bad != "" {
+		return bad, why
+	}
+	return scan(p.UploadEndpoints)
+}
+
 // isHomepageURL 判断上传端点是不是站点首页（路径为空或 "/"）。
 // 这种地址不可能接受 PUT/POST 数据，预检直接判失败。
 func isHomepageURL(raw string) bool {

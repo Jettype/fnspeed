@@ -26,7 +26,7 @@ func newSchedEngine(t *testing.T) (*Engine, *scheduler) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	st := NewStats()
-	st.StartAt = time.Now().Add(-10 * time.Second) // 越过 4 秒慢启动门槛
+	st.SetStartAt(time.Now().Add(-10 * time.Second)) // 越过 4 秒慢启动门槛
 	st.Running.Store(true)
 
 	e := &Engine{
@@ -199,7 +199,7 @@ func TestSampleClampsNegativeStreamRate(t *testing.T) {
 func TestEvaluateIgnoredDuringSlowStart(t *testing.T) {
 	e, s := newSchedEngine(t)
 	now := time.Now()
-	e.stats.StartAt = now.Add(-2 * time.Second) // 还在头 4 秒里
+	e.stats.SetStartAt(now.Add(-2 * time.Second)) // 还在头 4 秒里
 	setPoints(s, now, 5e6)
 
 	s.evaluate(ratePoint{}, now)

@@ -5,15 +5,25 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	// maxConfigBody 是配置导入口的体积上限。一份全量配置实测 30KB 上下，
+	// 4MB 已经宽松到能容纳上千个配置集。
+	maxConfigBody = 4 << 20
+	// maxSmallBody 用于只带几个字段的接口（settings / selftest / probe）。
+	maxSmallBody = 1 << 20
+	// maxEndpoints 限制单次任务能挂多少条端点。
+	// 并发上限是 64，端点再多也只是排队，却会把预检与调度拖到分钟级。
+	maxEndpoints = 64
 )
 
 type App struct {
@@ -48,8 +58,13 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, map[string]any{"settings": a.settings.Get()})
 	case http.MethodPost:
+		raw, err := readAllLimited(r, maxSmallBody)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		var g GlobalSettings
-		if err := json.NewDecoder(r.Body).Decode(&g); err != nil {
+		if err := json.Unmarshal(raw, &g); err != nil {
 			writeErr(w, http.StatusBadRequest, "请求体不是合法 JSON")
 			return
 		}
@@ -241,12 +256,23 @@ func (a *App) handleStart(w http.ResponseWriter, r *http.Request) {
 	defer a.startMu.Unlock()
 
 	var req startReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	body, err := readAllLimited(r, maxConfigBody)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体不是合法 JSON")
 		return
 	}
 	if !req.Authorized {
 		writeErr(w, http.StatusForbidden, "需要先勾选「目标为自有或已授权资源」")
+		return
+	}
+	if len(req.DownloadURLs) > maxEndpoints || len(req.UploadURLs) > maxEndpoints {
+		writeErr(w, http.StatusBadRequest,
+			fmt.Sprintf("单次任务的端点上限是 %d 条（当前下载 %d / 上传 %d）",
+				maxEndpoints, len(req.DownloadURLs), len(req.UploadURLs)))
 		return
 	}
 
@@ -263,12 +289,18 @@ func (a *App) handleStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "没有可用的端点，请先填入目标 URL")
 		return
 	}
+	// scheme / 主机名不合法就别进引擎：file:// 与 gopher:// 会让 http.Client 报
+	// 「unsupported protocol scheme」，上传那条路更糟 —— 它自己拼 socket，会当成 :80 去连。
+	if bad, why := firstBadEndpoint(p); bad != "" {
+		writeErr(w, http.StatusBadRequest, fmt.Sprintf("端点地址不合法：%s（%s）", bad, why))
+		return
+	}
 
 	a.stats.Reset()
 	// 预检要花几秒，先把状态置成运行中，UI 立刻进入爬坡态，不让用户盯空白
 	a.stats.Running.Store(true)
 	a.stats.SetPhase("ramp")
-	a.stats.StartAt = time.Now()
+	a.stats.SetStartAt(time.Now())
 	eng := NewEngine(p, a.stats, a.settings.Get().Region)
 
 	a.mu.Lock()
@@ -402,8 +434,17 @@ func (a *App) handleProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req probeReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	body, err := readAllLimited(r, maxSmallBody)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体不是合法 JSON")
+		return
+	}
+	if len(req.URLs) > maxEndpoints {
+		writeErr(w, http.StatusBadRequest, fmt.Sprintf("一次最多探测 %d 条 URL", maxEndpoints))
 		return
 	}
 	type item struct {
@@ -426,8 +467,8 @@ func (a *App) handleProbe(w http.ResponseWriter, r *http.Request) {
 			it := item{URL: u, Status: string(StatusOK), Mode: string(ModeRaw)}
 			if isHomepageURL(u) {
 				it.Status, it.Err = string(StatusInvalid), "非直传端点（指向站点首页）"
-			} else if _, err := url.Parse(u); err != nil {
-				it.Status, it.Err = string(StatusInvalid), "URL 无法解析"
+			} else if err := checkEndpointURL(u); err != nil {
+				it.Status, it.Err = string(StatusInvalid), err.Error()
 			}
 			out = append(out, it)
 			continue
@@ -502,8 +543,12 @@ func (a *App) handleProfiles(w http.ResponseWriter, r *http.Request) {
 		// 删除配置集：DELETE /api/profiles?id=xxx[&id=yyy]
 		// 也支持 DELETE /api/profiles/xxx
 		ids := r.URL.Query()["id"]
-		if p := strings.TrimPrefix(r.URL.Path, "/api/profiles"); p != "" && p != "/" {
-			ids = append(ids, strings.Trim(p, "/"))
+		// 也支持 DELETE /api/profiles/xxx；但这个路径同时也是 /api/config 的
+		// 兼容入口，没匹配上前缀时不能把整条 path 当成 id（那会删掉一个不存在的东西）。
+		if p := strings.TrimPrefix(r.URL.Path, "/api/profiles"); p != r.URL.Path {
+			if id := strings.Trim(p, "/"); id != "" {
+				ids = append(ids, id)
+			}
 		}
 		// 再兜一层：body 里传 {"ids":[...]} 也能删
 		if len(ids) == 0 {
@@ -552,10 +597,12 @@ func (a *App) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 	mode := r.URL.Query().Get("mode")
 	var (
-		b   []byte
-		err error
+		b    []byte
+		err  error
+		name = "standard"
 	)
 	if mode == "full" {
+		name = "full"
 		b, err = cfg.ExportFull()
 	} else {
 		b, err = cfg.ExportStandard()
@@ -565,7 +612,8 @@ func (a *App) handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="fnspeed-config-`+mode+`.json"`)
+	// 文件名只认白名单值：mode 来自查询参数，直接拼进去等于让调用方改写头部
+	w.Header().Set("Content-Disposition", `attachment; filename="fnspeed-config-`+name+`.json"`)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(b)
 }
@@ -580,7 +628,10 @@ func (a *App) handleHistory(w http.ResponseWriter, r *http.Request) {
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	items := make([]json.RawMessage, 0, len(lines))
 	for _, ln := range lines {
-		if ln = strings.TrimSpace(ln); ln == "" {
+		ln = strings.TrimSpace(ln)
+		// 半行(上次写入被断电/磁盘满截断)直接跳过：json.RawMessage 会把字节原样
+		// 塞进响应，一行坏数据就能让整个 /api/history 变成非法 JSON。
+		if ln == "" || !json.Valid([]byte(ln)) {
 			continue
 		}
 		items = append(items, json.RawMessage(ln))
@@ -588,10 +639,17 @@ func (a *App) handleHistory(w http.ResponseWriter, r *http.Request) {
 	if len(items) > 50 {
 		items = items[len(items)-50:]
 	}
-	sort.SliceStable(items, func(i, j int) bool { return i > j })
+	// 最新的在最前面。原先用 sort.SliceStable 配 `i > j` 当 less（比较的是下标
+	// 而不是元素），排序结果依赖实现细节，等于把顺序交给运气；这里直接反转。
+	for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+		items[i], items[j] = items[j], items[i]
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
+// readAllLimited 读请求体并限制体积。
+// 只能吞 io.EOF：连接中途断掉时若把它当成「读完了」，调用方会把半截 JSON
+// 当完整配置去解析 —— 轻则报「不是合法 JSON」，重则在 Append 语义下静默丢数据。
 func readAllLimited(r *http.Request, max int64) ([]byte, error) {
 	defer r.Body.Close()
 	buf := make([]byte, 0, 4096)
@@ -607,7 +665,10 @@ func readAllLimited(r *http.Request, max int64) ([]byte, error) {
 			buf = append(buf, tmp[:n]...)
 		}
 		if err != nil {
-			break
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("读取请求体失败: %w", err)
 		}
 	}
 	return buf, nil
@@ -640,13 +701,24 @@ func (a *App) handleSelfTest(w http.ResponseWriter, r *http.Request) {
 
 	urls := cleanURLList(req.URLs)
 	if len(urls) == 0 {
-		// 不传就测当前配置里的全部端点
+		// 不传就测当前配置里的全部端点。
+		// cfg 可能为 nil：启动阶段 EnsureSeeded 写盘失败时 a.cfg 就是空指针，
+		// 这里不判空会直接把 handler 打成 panic。
 		a.mu.Lock()
 		cfg := a.cfg
 		a.mu.Unlock()
-		for _, p := range cfg.Profiles {
-			urls = append(urls, p.DownloadURLs...)
-			urls = append(urls, p.UploadURLs...)
+		if cfg != nil {
+			for _, p := range cfg.Profiles {
+				urls = append(urls, p.DownloadURLs...)
+				urls = append(urls, p.UploadURLs...)
+				for _, ep := range p.DownloadEndpoints {
+					urls = append(urls, ep.URL)
+				}
+				for _, ep := range p.UploadEndpoints {
+					urls = append(urls, ep.URL)
+				}
+			}
+			urls = cleanURLList(urls)
 		}
 	}
 	if len(urls) == 0 {

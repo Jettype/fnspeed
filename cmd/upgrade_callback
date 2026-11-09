@@ -1,20 +1,13 @@
 #!/bin/bash
-# 升级后：补权限、确保配置文件存在，不覆盖用户数据
+# 升级后：补可执行权限。配置文件一律交给程序自己管，这里不碰。
 CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$CMD_DIR/common"
 
 [ -f "$BIN" ] && chmod 755 "$BIN" 2>/dev/null
 
-if [ ! -f "$ETC/profiles.json" ]; then
-    cat >"$ETC/profiles.json" <<'JSON'
-{
-  "format": "PAOMAN_SPEED_TEST_CONFIG",
-  "version": 2,
-  "selectedProfileId": "",
-  "profiles": []
-}
-JSON
-fi
-
+# 这里曾经会写 etc/profiles.json —— 那是 1.5.0 及以前的合并配置格式。
+# 1.5.1 起改成 builtin.json + user.json，程序启动时如果发现 user.json 缺失
+# 而 profiles.json 还在，会把后者改名成 .legacy.bak 并提示「清理了 N 个旧配置集」：
+# 升级脚本辛辛苦苦造出来的文件，被自己下一次启动当成垃圾清掉了。
 log "upgrade_callback 完成"
 exit 0

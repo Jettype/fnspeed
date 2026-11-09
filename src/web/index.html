@@ -809,6 +809,7 @@ window.addEventListener("resize", draw);
 /* ---------------- 渲染 ---------------- */
 let GS = {concurrency:64, durationSec:60, showIp:true, showHit:false, region:""};
 let lastRate=0, lastRateAt=0;
+let lastMainUp=false; // 上一帧主读数用的方向；切换时清掉兜底值，免得带着旧方向的读数
 let lastFrame=null;   // 最近一帧快照：命中探测回来后用它重绘
 let HITS={};          // url -> HitInfo，只在内存里，刷新即丢
 let hitBusy=false;
@@ -819,25 +820,36 @@ function render(d){
   badge.className = "badge " + (phase==="steady"?"steady":(phase==="ramp"?"live":(phase==="done"?"done":"")));
   txt.textContent = phase==="steady"?"稳定期":phase==="ramp"?"爬坡中":phase==="done"?"已完成":"空闲";
 
+  const recvTotal=d.recvTotal||0, sentTotal=d.sentTotal||0;
+
+  // 主读数跟随测试方向。上行模式只跑上传流，下行速率恒为 0，
+  // 拿它当主读数就是一个永远不动的 0 bps —— 数据全在，只是读错了表。
+  // 例外：选了上行却一条上传源都没有时引擎会落回下载。阈值卡到 4MB，
+  // 免得把上传请求的响应头那几 KB 当成「其实在下载」而把主读数抖成下行。
+  let mainUp = mode==="up";
+  if(mainUp && sentTotal===0 && recvTotal>(4<<20)) mainUp=false;
+  if(mainUp!==lastMainUp){ lastRate=0; lastRateAt=0; lastMainUp=mainUp; }
+
   // SSE 每 500ms 一帧，速率是按秒窗口算的，偶尔会有一帧落在窗口缝里变成 0。
   // 直接显示会看到数字闪 0 —— 上一帧的值最多保留 1.6 秒兜一下。
   // 跑完之后不再归零：定格成本次平均，否则大号显示 0 而下面「平均」格有数，
   // 用户会以为是 bug。
   const nowMs=Date.now();
-  let rv=d.recvRate||0;
+  const mainTotal = mainUp? sentTotal : recvTotal;
+  let rv = (mainUp? d.sentRate : d.recvRate)||0;
   if(d.running){
     if(rv>0){ lastRate=rv; lastRateAt=nowMs; }
     else if(nowMs-lastRateAt<1600){ rv=lastRate; }
     else { lastRate=0; }
-  }else if((d.recvTotal||0)>0){
-    rv = d.avgRecv||0;
+  }else if(mainTotal>0){
+    rv = (mainUp? d.avgSent : d.avgRecv)||0;
     lastRate=rv;
   }else{
     lastRate=0;
   }
-  const frozen = !d.running && (d.recvTotal||0)>0;
+  const frozen = !d.running && mainTotal>0;
   $("heroAvgTag").hidden = !frozen;
-  const D=fmt.speed(rv), U=fmt.speed(d.sentRate||0);
+  const D=fmt.speed(rv);
   const [di,dd]=splitNum(D.v);
   $("rateD").textContent=di;
   $("rateDdec").textContent=dd;
@@ -845,29 +857,33 @@ function render(d){
 
   $("heroTime").textContent=fmt.dur(d.elapsedSec);
   $("heroTotal").textContent=fmt.dur(GS.durationSec);
-  $("heroMode").textContent = mode==="up"?"UPLINK" : (mode==="down"?"DOWNLINK":"BIDIRECTIONAL");
+  // 眉标方向跟主读数走：兜底切到下行时不能还挂着 UPLINK
+  $("heroMode").textContent = mainUp?"UPLINK" : (mode==="both"?"BIDIRECTIONAL":"DOWNLINK");
 
-  // 刻度带：当前下行 / 本次峰值，稳定期接近满格
-  const cur=rv, peak=d.peakRecv||0;
+  // 刻度带：当前速率 / 本次峰值，稳定期接近满格
+  const cur=rv, peak=(mainUp? d.peakSent : d.peakRecv)||0;
   const ref=Math.max(peak,cur,1);
   const pct=Math.min(100, cur/ref*100);
   $("tickFill").style.clipPath="inset(0 "+(100-pct).toFixed(1)+"% 0 0)";
 
   // 指标格：累计流量是主角。1.5.0 只保留了速率，总量被漏掉了。
-  const recvTotal=d.recvTotal||0, sentTotal=d.sentTotal||0;
+  // 峰值/稳定/平均跟着主读数走，否则上行模式下三格永远是「—」。
   const totalBytes=recvTotal+sentTotal;
   $("gTotal").textContent  = totalBytes? fmt.bytes(totalBytes) : "—";
   $("gDown").textContent   = recvTotal? fmt.bytes(recvTotal) : "—";
   $("gUp").textContent     = sentTotal? fmt.bytes(sentTotal) : "—";
   $("gPeak").textContent   = peak? fmt.short(peak):"—";
-  $("gSteady").textContent = d.steadyRecv? fmt.short(d.steadyRecv):"—";
-  $("gAvg").textContent    = d.avgRecv? fmt.short(d.avgRecv):"—";
+  const steady=(mainUp? d.steadySent : d.steadyRecv)||0;
+  $("gSteady").textContent = steady? fmt.short(steady):"—";
+  const avg=(mainUp? d.avgSent : d.avgRecv)||0;
+  $("gAvg").textContent    = avg? fmt.short(avg):"—";
 
-  // 实时上行放进眉标：手机上没有 hover，塞 title 等于看不到
-  const upRate=d.sentRate||0;
-  if(upRate>0){
-    const US=fmt.speed(upRate);
-    $("heroUp").textContent="↑"+US.v+US.u;
+  // 实时次方向放进眉标：手机上没有 hover，塞 title 等于看不到。
+  // 主读数已经占了主方向，这里只补另一条线的值。
+  const secRate=(mainUp? d.recvRate : d.sentRate)||0;
+  if(secRate>0){
+    const US=fmt.speed(secRate);
+    $("heroUp").textContent=(mainUp?"↓":"↑")+US.v+US.u;
     $("heroUp").hidden=false; $("heroUpSep").hidden=false;
   }else{
     $("heroUp").hidden=true; $("heroUpSep").hidden=true;

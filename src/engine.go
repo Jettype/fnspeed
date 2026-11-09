@@ -78,6 +78,11 @@ type URLState struct {
 	Status URLStatus
 	Size   int64
 
+	// metaMu 保护上面三个字段。预检 goroutine 会写、SSE 每 500ms 会读、
+	// 各条流的 downloadOnce 运行中也会改（403 判失效、418 判风控），
+	// 而它们都是 string —— 不加锁时读到的是 ptr 与 len 可能不匹配的半写值。
+	metaMu sync.RWMutex
+
 	Recv       atomic.Int64
 	Sent       atomic.Int64
 	Reconnects atomic.Int64
@@ -113,6 +118,33 @@ func (s *URLState) setErr(msg string) {
 	s.errMu.Unlock()
 }
 
+// setMeta 一次性写入传输模式 / 状态 / 体积，读侧永远看到一致的一组值。
+func (s *URLState) setMeta(mode TransferMode, status URLStatus, size int64) {
+	s.metaMu.Lock()
+	s.Mode, s.Status, s.Size = mode, status, size
+	s.metaMu.Unlock()
+}
+
+func (s *URLState) setStatus(status URLStatus) {
+	s.metaMu.Lock()
+	s.Status = status
+	s.metaMu.Unlock()
+}
+
+// status 供只关心可用性的调用方使用。
+func (s *URLState) status() URLStatus {
+	s.metaMu.RLock()
+	defer s.metaMu.RUnlock()
+	return s.Status
+}
+
+// meta 返回一致的一份副本，downloadOnce 与 out() 用。
+func (s *URLState) meta() (TransferMode, URLStatus, int64) {
+	s.metaMu.RLock()
+	defer s.metaMu.RUnlock()
+	return s.Mode, s.Status, s.Size
+}
+
 func (s *URLState) getErr() string {
 	s.errMu.Lock()
 	defer s.errMu.Unlock()
@@ -135,8 +167,9 @@ func (s *URLState) getRemote() string {
 }
 
 func (s *URLState) out() URLOut {
+	mode, status, _ := s.meta()
 	o := URLOut{
-		URL: s.EP.URL, Kind: s.Kind, Mode: string(s.Mode), Status: string(s.Status),
+		URL: s.EP.URL, Kind: s.Kind, Mode: string(mode), Status: string(status),
 		Recv: s.Recv.Load(), Sent: s.Sent.Load(),
 		Reconnects: s.Reconnects.Load(), Failures: s.Failures.Load(),
 		RemoteIP:  s.getRemote(),
@@ -265,7 +298,7 @@ func (e *Engine) Prepare() {
 				st.Short.Store(true)
 			}
 			if st.settled.CompareAndSwap(false, true) {
-				st.Mode, st.Status, st.Size = r.Mode, r.Status, r.Size
+				st.setMeta(r.Mode, r.Status, r.Size)
 			}
 			if r.Err != "" {
 				st.setErr(r.Err)
@@ -282,16 +315,16 @@ func (e *Engine) Prepare() {
 
 		// 上传端点不做 GET 预检：多数接收端不响应 GET，探测只会得到 405 假阴性。
 		if isHomepageURL(ep.URL) {
-			st.Status = StatusInvalid
+			st.setStatus(StatusInvalid)
 			st.setErr("非直传端点（指向站点首页）")
 			continue
 		}
-		if _, err := url.Parse(ep.URL); err != nil {
-			st.Status = StatusInvalid
-			st.setErr("URL 无法解析")
+		if err := checkEndpointURL(ep.URL); err != nil {
+			st.setStatus(StatusInvalid)
+			st.setErr(err.Error())
 			continue
 		}
-		st.Status = StatusOK
+		st.setStatus(StatusOK)
 	}
 	// 预检只是「探路」，不能让用户干等。国内源通常 1 秒内探完，
 	// 探不完的多半是被墙或在限流 —— 与其让用户盯 15 秒空白，
@@ -304,8 +337,7 @@ func (e *Engine) Prepare() {
 		mu.Lock()
 		for _, st := range e.dl {
 			if st.settled.CompareAndSwap(false, true) {
-				st.Status = StatusOK
-				st.Mode = ModeStream
+				st.setMeta(ModeStream, StatusOK, 0)
 				st.setErr("预检未在 2.5s 内完成，先按可用处理")
 			}
 		}
@@ -398,7 +430,7 @@ func (e *Engine) forceRunIfBlocked() {
 
 	usable := func(list []*URLState) bool {
 		for _, st := range list {
-			if st.Status == StatusOK {
+			if st.status() == StatusOK {
 				return true
 			}
 		}
@@ -408,17 +440,19 @@ func (e *Engine) forceRunIfBlocked() {
 		return
 	}
 	for _, st := range e.dl {
-		st.Status = StatusOK
-		if st.Mode == "" {
-			st.Mode = ModeStream
+		mode, _, size := st.meta()
+		if mode == "" {
+			mode = ModeStream
 		}
+		st.setMeta(mode, StatusOK, size)
 		st.setErr("预检判定不可用，已降级为试跑")
 	}
 	for _, st := range e.ul {
-		st.Status = StatusOK
-		if st.Mode == "" {
-			st.Mode = ModeRaw
+		mode, _, size := st.meta()
+		if mode == "" {
+			mode = ModeRaw
 		}
+		st.setMeta(mode, StatusOK, size)
 	}
 }
 
@@ -498,6 +532,13 @@ func (e *Engine) AddStream(kind string) *stream {
 
 	ctx, cancel := context.WithCancel(e.ctx)
 	e.mu.Lock()
+	// 上限必须在锁内复查：调度器、RestartStream、watchStall 三条路都可能同时
+	// 调 AddStream，锁外那次判断只是快速路径，挡不住并发穿透。
+	if len(e.streams) >= e.MaxStreams() {
+		e.mu.Unlock()
+		cancel()
+		return nil
+	}
 	e.nextID++
 	s := &stream{id: e.nextID, kind: kind, st: st, ctx: ctx, cancel: cancel, born: time.Now()}
 	e.streams[s.id] = s
@@ -553,7 +594,7 @@ func (e *Engine) removeStream(id int) {
 // 调度器据此判断要不要做覆盖补漏。
 func (e *Engine) coverGap() bool {
 	for _, st := range e.dl {
-		if st.Status == StatusOK && !st.Short.Load() && st.active.Load() == 0 {
+		if st.status() == StatusOK && !st.Short.Load() && st.active.Load() == 0 {
 			return true
 		}
 	}
@@ -587,7 +628,7 @@ func (e *Engine) pickDL() *URLState {
 	var best, fallback *URLState
 	bestN, fbN := int32(1<<30), int32(1<<30)
 	for _, st := range e.dl {
-		if st.Status != StatusOK {
+		if st.status() != StatusOK {
 			continue
 		}
 		n := st.active.Load()
@@ -808,7 +849,7 @@ func (e *Engine) watchLimits() {
 		case <-e.ctx.Done():
 			return
 		case <-t.C:
-			if e.profile.DurationSec > 0 && time.Since(e.stats.StartAt).Seconds() >= float64(e.profile.DurationSec) {
+			if e.profile.DurationSec > 0 && time.Since(e.stats.StartAt()).Seconds() >= float64(e.profile.DurationSec) {
 				e.Stop("到达时长上限")
 				return
 			}
@@ -899,6 +940,10 @@ func (e *Engine) downloadLoop(s *stream) {
 }
 
 func (e *Engine) nextDL(cur *URLState) *URLState {
+	n := len(e.dl)
+	if n == 0 {
+		return nil
+	}
 	idx := -1
 	for i, s := range e.dl {
 		if s == cur {
@@ -908,16 +953,16 @@ func (e *Engine) nextDL(cur *URLState) *URLState {
 	}
 
 	// 第一轮只挑预检通过的端点。
-	for i := 1; i <= len(e.dl); i++ {
-		cand := e.dl[(idx+i)%len(e.dl)]
-		if cand != cur && cand.Status == StatusOK {
+	for i := 1; i <= n; i++ {
+		cand := e.dl[((idx+i)%n+n)%n]
+		if cand != cur && cand.status() == StatusOK {
 			return cand
 		}
 	}
 	// 全都被标成不可用时，退而轮换到任意另一个端点：
 	// 预检结论可能已经过期（限流解除、签名刷新），总比死磕同一个 418 强。
-	for i := 1; i <= len(e.dl); i++ {
-		cand := e.dl[(idx+i)%len(e.dl)]
+	for i := 1; i <= n; i++ {
+		cand := e.dl[((idx+i)%n+n)%n]
 		if cand != cur {
 			return cand
 		}
@@ -952,12 +997,13 @@ func (e *Engine) downloadOnce(s *stream, st *URLState, client *http.Client, buf 
 	//   2) 一条请求能连续读很久，重连频率大幅下降。旧实现固定 32MB 分片，
 	//      在千兆链路上 0.2 秒就下一块，等于每秒握手好几次。
 	// 服务器不认 Range 时返回 200 全量，行为退化成从头读，不影响正确性。
-	switch st.Mode {
+	mode, _, size := st.meta()
+	switch mode {
 	case ModeChunkLoop, ModeFileLoop:
-		if st.Size > 0 {
+		if size > 0 {
 			span := int64(256 << 20)
-			if st.Size <= span {
-				span = st.Size / 2
+			if size <= span {
+				span = size / 2
 			}
 			var start int64
 			if span > 0 {
@@ -995,11 +1041,11 @@ func (e *Engine) downloadOnce(s *stream, st *URLState, client *http.Client, buf 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden && isTimeLimitedURL(st.EP.URL) {
-		st.Status = StatusExpired
+		st.setStatus(StatusExpired)
 		return fmt.Errorf("HTTP 403，签名失效")
 	}
 	if resp.StatusCode == 418 {
-		st.Status = StatusInvalid
+		st.setStatus(StatusInvalid)
 		st.setErr("HTTP 418，目标端风控拦截")
 		return fmt.Errorf("HTTP 418，目标端风控拦截")
 	}
@@ -1007,7 +1053,7 @@ func (e *Engine) downloadOnce(s *stream, st *URLState, client *http.Client, buf 
 		return fmt.Errorf("HTTP 429，目标端限流")
 	}
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
-		st.Status = StatusInvalid
+		st.setStatus(StatusInvalid)
 		return fmt.Errorf("HTTP %d，端点不可用", resp.StatusCode)
 	}
 	if resp.StatusCode >= 400 {
@@ -1131,11 +1177,15 @@ func (e *Engine) uploadOnce(s *stream, st *URLState) error {
 	}
 	addr := net.JoinHostPort(u.Hostname(), port)
 
-	conn, err := newDialer().DialContext(s.ctx, "tcp", addr)
+	raw, err := newDialer().DialContext(s.ctx, "tcp", addr)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	// 用闭包而不是 defer conn.Close()：defer 在注册那一刻就把接口值求了，
+	// 后面 conn 换成 tls.Conn 时关掉的仍是裸 TCP —— TLS 那层没有 close_notify，
+	// 对端会当成被掐断。闭包读的是变量本身，关的是最终建立的那条连接。
+	conn := raw
+	defer func() { _ = conn.Close() }()
 
 	if useTLS {
 		tc := tls.Client(conn, &tls.Config{
@@ -1162,7 +1212,11 @@ func (e *Engine) uploadOnce(s *stream, st *URLState) error {
 		if strings.EqualFold(k, "Content-Length") || strings.EqualFold(k, "Host") {
 			continue
 		}
-		hdr.WriteString(k + ": " + v + "\r\n")
+		name, val, ok := safeHeader(k, v)
+		if !ok {
+			continue
+		}
+		hdr.WriteString(name + ": " + val + "\r\n")
 	}
 	hdr.WriteString("Connection: close\r\n\r\n")
 
@@ -1177,10 +1231,13 @@ func (e *Engine) uploadOnce(s *stream, st *URLState) error {
 	defer f.Close()
 
 	stop := make(chan struct{})
+	// 把 conn 按值捕获：TLS 分支会重新给 conn 赋值，闭包直接读变量会与主
+	// goroutine 的赋值撞上（数据竞争），还可能把 deadline 打到旧的裸连接上。
+	c := conn
 	safeGo("uploadDeadline", func() {
 		select {
 		case <-s.ctx.Done():
-			_ = conn.SetDeadline(time.Now())
+			_ = c.SetDeadline(time.Now())
 		case <-stop:
 		}
 	})
@@ -1199,6 +1256,26 @@ func (e *Engine) uploadOnce(s *stream, st *URLState) error {
 		return err
 	}
 	return nil
+}
+
+// crlfReplacer 把头部值里的换行压成空格。
+var crlfReplacer = strings.NewReplacer("\r", " ", "\n", " ")
+
+// safeHeader 过滤会破坏请求结构的自定义头。
+//
+// 上传这条路径是自己拼 HTTP 报文，不像 http.Client 那样有校验兜底：
+// 头名里带冒号能把整行改成任意头部，值里带 CRLF 可以直接插入一条新请求
+// （HTTP 请求拆分）。头来自配置集，而配置集是能导入的 —— 别人给的配置
+// 不该有能力构造出第二个请求。
+func safeHeader(k, v string) (string, string, bool) {
+	k = strings.TrimSpace(k)
+	if k == "" || strings.ContainsAny(k, ":\r\n") {
+		return "", "", false
+	}
+	if strings.ContainsAny(v, "\r\n") {
+		v = crlfReplacer.Replace(v)
+	}
+	return k, v, true
 }
 
 type countingWriter struct {

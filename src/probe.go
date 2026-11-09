@@ -44,9 +44,8 @@ const probeTimeout = 6 * time.Second
 
 // ProbeURL 探测一个下载端点。
 func ProbeURL(ctx context.Context, ep Endpoint) ProbeResult {
-	u, err := url.Parse(ep.URL)
-	if err != nil {
-		return ProbeResult{Status: StatusInvalid, Err: "URL 无法解析"}
+	if err := checkEndpointURL(ep.URL); err != nil {
+		return ProbeResult{Status: StatusInvalid, Err: err.Error()}
 	}
 
 	// 上传端点如果指向站点首页，不可能接受数据，直接判非直传。
@@ -65,7 +64,6 @@ func ProbeURL(ctx context.Context, ep Endpoint) ProbeResult {
 			return r2
 		}
 	}
-	_ = u
 	return res
 }
 
@@ -101,7 +99,7 @@ func doProbe(ctx context.Context, ep Endpoint, withReferer, withRange bool) Prob
 	if err != nil {
 		var ue *url.Error
 		if errors.As(err, &ue) && ue.Timeout() {
-			return ProbeResult{Status: StatusUnknown, Err: "探测超时（15s 无响应，可能是 DNS 慢、被墙，或目标端限流）"}
+			return ProbeResult{Status: StatusUnknown, Err: fmt.Sprintf("探测超时（%g 秒无响应，可能是 DNS 慢、被墙，或目标端限流）", probeTimeout.Seconds())}
 		}
 		return ProbeResult{Status: StatusUnknown, Err: shortErr(err)}
 	}

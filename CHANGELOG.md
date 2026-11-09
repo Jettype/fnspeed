@@ -36,6 +36,47 @@ EventSource 的半开连接往往不会触发 `onerror`，页面就永久停在�
 现在界面自己盯帧间隔（超过 4 秒无帧就重建连接），并在 `visibilitychange` / `pageshow`
 时立刻拉一次最新状态。
 
+**修：上行测试时大号读数一直是 0 bps**
+
+现象是选「上行」跑起来后，读数窗大字停在 `0 bps`，而眉标有 `↑30.4Mbps`、曲线在动、
+累计已上传 71MB，峰值/稳定/平均三格全是「—」。
+
+两处都只认了下行：大号读数取 `recvRate`，三格取 `peakRecv/steadyRecv/avgRecv`。
+上行模式只跑上传流，下行速率恒为 0，于是数字不动、三格永远空。现在主读数跟随测试方向
+（`mode==="up"` 时取 `sentRate` 与 `peakSent/steadySent/avgSent`），刻度带、结束后的
+「本次平均」定格、眉标次方向一并跟着切换。选了上行却没填上传源、引擎落回下载的情形仍按
+下行走 —— 阈值卡 4MB，不会把上传响应的几 KB 误判成「其实在下载」。
+
+**修：一轮安全与健壮性扫描（输入校验 / 边界 / 资源释放）**
+
+按「能被谁触发」分三组：
+
+- **输入校验**：`/api/start`、`/api/probe`、`/api/settings` 原先直接把 `r.Body` 交给
+  `json.Decoder`，没有体积上限，一个几百 MB 的请求体就能把进程的堆顶满；现在统一走
+  `readAllLimited`，端点数量也卡到 64 条（并发上限是 64，再多只是排队，却让预检慢到分钟级）。
+  端点地址新增 `checkEndpointURL`：只认 http/https 且必须有主机名，压测端点、预检、命中探测、
+  自检四条路径统一走它。下载侧遇到 `file://` 抛的是
+  一句英文 `unsupported protocol scheme`，上传侧更糟 —— 它自己拼 socket，`ftp://host/p` 会变成
+  向 `host:80` 发 PUT。上传请求头还要过一遍 `safeHeader`：头名带冒号、值里带 CRLF 能直接插入
+  第二条请求，而配置集是可以从别人那里导入的。`/api/config/export` 的文件名、`/api/profiles`
+  的 DELETE 路径也改成白名单/严格前缀匹配。
+- **边界与崩溃**：`/api/selftest` 不传 urls 时会遍历 `a.cfg.Profiles`，而启动阶段写盘失败时
+  `a.cfg` 是 nil —— 直接 nil 解引用 panic。`/api/history` 读的是按行追加的文件，一行被断电
+  截断就会让整个响应变成非法 JSON（`json.RawMessage` 原样透传），现在逐行 `json.Valid` 过滤；
+  文件超过 1MB 只保留最后 200 行，否则 NAS 上一年能攒出几十 MB。`itoa(0)` 返回空串的老坑也补了。
+- **并发与资源**：`URLState.Status/Mode/Size` 被预检 goroutine、SSE 读取和运行中的
+  `downloadOnce` 三方同时访问且没有锁，读到半写的 string 可能直接崩；现在收进 `metaMu`。
+  `uploadOnce` 的 deadline goroutine 闭包捕获了 `conn` 变量，而 TLS 分支会重新赋值它 ——
+  数据竞争，还可能把 deadline 打到旧连接上。`defer conn.Close()` 在注册时就把接口值求了，
+  https 会话因此从不发 `close_notify`，改成闭包延迟求值。调度器的 `lastBytes` 只增不减，
+  一天的补偿下来能攒几十万条；`Stats.Tick` 在换局瞬间会算出负速率（`-1829000000 bps`）；
+  `Stats.StartAt` 是个被并发读写的 `time.Time`（三个机器字），现在换成原子毫秒。
+  `/api/history` 的「倒序」原来是拿 `i > j` 当 less 的 `sort.SliceStable`，顺序全看实现。
+
+另外：`upgrade_callback` 不再写 1.5.0 时代的 `etc/profiles.json`（程序下次启动会把它改名
+`.legacy.bak` 并提示「清理了 N 个旧配置集」，等于升级脚本自己造垃圾）；sink 的 token 改成
+常量时间比较；CI 的 Go 版本从 `1.21` 收敛到 `1.21.x`，固定主版本会漏掉标准库的安全补丁。
+
 ## 1.5.7 — 2026-11-04
 
 **修：并发上限不生效**

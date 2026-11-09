@@ -7,6 +7,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"flag"
 	"fmt"
 	"io"
@@ -85,7 +86,8 @@ func authOK(r *http.Request) bool {
 		h := r.Header.Get("Authorization")
 		t = strings.TrimPrefix(h, "Bearer ")
 	}
-	return t == token
+	// 常量时间比较：token 是唯一的访问凭据，别让响应时间泄露出「前几位对了」。
+	return subtle.ConstantTimeCompare([]byte(t), []byte(token)) == 1
 }
 
 func handleDL(w http.ResponseWriter, r *http.Request) {

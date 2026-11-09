@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -69,7 +70,11 @@ func (r *Ring) Snapshot(limit int) []Sample {
 }
 
 type Stats struct {
-	StartAt    time.Time
+	// startAtMs 是本次运行起点（Unix 毫秒），0 表示还没开始。
+	// 用原子量而不是 time.Time：开始一局时 Reset 会写它，而上一个引擎的
+	// scheduler / watchLimits 可能还没退干净，两边同时读写 time.Time
+	// （三个机器字）会读出半写值，算出来的 elapsed 直接是天文数字。
+	startAtMs  atomic.Int64
 	RecvBytes  atomic.Int64
 	SentBytes  atomic.Int64
 	Failures   atomic.Int64
@@ -126,6 +131,18 @@ func NewStats() *Stats {
 
 func (s *Stats) SetPhase(p string) { s.phase.Store(p) }
 
+// SetStartAt 记录本次运行的起点。
+func (s *Stats) SetStartAt(t time.Time) { s.startAtMs.Store(t.UnixMilli()) }
+
+// StartAt 返回本次运行的起点，零值表示还没开始。
+func (s *Stats) StartAt() time.Time {
+	ms := s.startAtMs.Load()
+	if ms == 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(ms)
+}
+
 func (s *Stats) Phase() string {
 	if v, ok := s.phase.Load().(string); ok {
 		return v
@@ -134,7 +151,7 @@ func (s *Stats) Phase() string {
 }
 
 func (s *Stats) Reset() {
-	s.StartAt = time.Now()
+	s.SetStartAt(time.Now())
 	s.RecvBytes.Store(0)
 	s.SentBytes.Store(0)
 	s.Failures.Store(0)
@@ -181,6 +198,14 @@ func (s *Stats) Tick() {
 		if dt > 0 {
 			rr := int64(float64(rec-s.lastRec) / dt)
 			rs := int64(float64(sen-s.lastSen) / dt)
+			// 换局瞬间计数器被 Reset 归零，而上一局的 Tick 可能还在跑：
+			// 差值会变成负数，直接显示就是「-1829000000 bps」。
+			if rr < 0 {
+				rr = 0
+			}
+			if rs < 0 {
+				rs = 0
+			}
 			s.lastRR.Store(rr)
 			s.lastRS.Store(rs)
 			if rr > s.peakRecv.Load() {
@@ -211,7 +236,7 @@ func (s *Stats) refreshSteady() {
 	if len(samples) < 4 {
 		return
 	}
-	base := s.StartAt.UnixMilli()
+	base := s.StartAt().UnixMilli()
 	var recv, sent []float64
 	for i := 1; i < len(samples); i++ {
 		dt := float64(samples[i].T-samples[i-1].T) / 1000
@@ -242,11 +267,13 @@ func (s *Stats) Finalize(streams int) {
 	// 先把总量与平均值定格：后面几个分支都可能提前 return，但这两项必须留下。
 	s.recvFinal.Store(s.RecvBytes.Load())
 	s.sentFinal.Store(s.SentBytes.Load())
-	if v := s.endAt.Load(); v > 0 && !s.StartAt.IsZero() {
-		if elapsed := time.UnixMilli(v).Sub(s.StartAt).Seconds(); elapsed > slowStartSec {
-			s.avgRecvFinal.Store(clampToPeak(int64(float64(s.RecvBytes.Load())/elapsed), s.peakRecv.Load()))
-			s.avgSentFinal.Store(clampToPeak(int64(float64(s.SentBytes.Load())/elapsed), s.peakSent.Load()))
-			s.avgFinal.Store(true)
+	if v := s.endAt.Load(); v > 0 {
+		if start := s.StartAt(); !start.IsZero() {
+			if elapsed := time.UnixMilli(v).Sub(start).Seconds(); elapsed > slowStartSec {
+				s.avgRecvFinal.Store(clampToPeak(int64(float64(s.RecvBytes.Load())/elapsed), s.peakRecv.Load()))
+				s.avgSentFinal.Store(clampToPeak(int64(float64(s.SentBytes.Load())/elapsed), s.peakSent.Load()))
+				s.avgFinal.Store(true)
+			}
 		}
 	}
 
@@ -257,7 +284,7 @@ func (s *Stats) Finalize(streams int) {
 	if len(samples) < 4 {
 		return
 	}
-	base := s.StartAt.UnixMilli()
+	base := s.StartAt().UnixMilli()
 
 	var recv, sent []float64
 	for i := 1; i < len(samples); i++ {
@@ -362,14 +389,14 @@ func (s *Stats) Snapshot(seriesLimit int, stopReason string, urls []URLOut) Snap
 	}
 
 	elapsed := 0.0
-	if !s.StartAt.IsZero() {
+	if start := s.StartAt(); !start.IsZero() {
 		end := time.Now()
 		if !s.Running.Load() {
 			if v := s.endAt.Load(); v > 0 {
 				end = time.UnixMilli(v)
 			}
 		}
-		elapsed = end.Sub(s.StartAt).Seconds()
+		elapsed = end.Sub(start).Seconds()
 		if elapsed < 0 {
 			elapsed = 0
 		}
@@ -433,6 +460,14 @@ type HistoryRec struct {
 	Verdict     string  `json:"verdict"`
 }
 
+// 历史文件的两个上限：超过 historyMaxBytes 就只保留最后 historyKeep 行。
+// 这是 NAS 上的长驻程序，一天跑十几轮、一年攒出几十 MB 也没人清理；
+// /api/history 又是整文件读进来再截断的，必须有个天花板。
+const (
+	historyMaxBytes = 1 << 20
+	historyKeep     = 200
+)
+
 func AppendHistory(dataDir string, rec HistoryRec) error {
 	if dataDir == "" {
 		return nil
@@ -442,12 +477,36 @@ func AppendHistory(dataDir string, rec HistoryRec) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	b, err := json.Marshal(rec)
 	if err != nil {
+		_ = f.Close()
 		return err
 	}
 	b = append(b, '\n')
 	_, err = f.Write(b)
-	return err
+	fi, statErr := f.Stat()
+	_ = f.Close()
+	if err != nil {
+		return err
+	}
+	if statErr == nil && fi.Size() > historyMaxBytes {
+		_ = trimHistory(path, historyKeep)
+	}
+	return nil
+}
+
+// trimHistory 只留最后 keep 行。失败不报错 —— 历史记录不是关键路径，
+// 写不进去也不该影响本次测速的结果。
+func trimHistory(path string, keep int) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	if len(lines) <= keep {
+		return nil
+	}
+	lines = lines[len(lines)-keep:]
+	out := strings.Join(lines, "\n") + "\n"
+	return os.WriteFile(path, []byte(out), 0644)
 }

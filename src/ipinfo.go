@@ -267,6 +267,9 @@ func ipClient() *http.Client {
 // ProbeExitIP 并行问多个 echo 源，返回全部结果（含失败的，前端可按需展示）。
 func ProbeExitIP(ctx context.Context) ([]ExitIP, bool) {
 	c := ipClient()
+	// 每条 Transport 都带一套空闲连接，不主动关就得等 30s 的 IdleConnTimeout
+	// 才回收；反复点「查 IP」时会一路堆着。
+	defer c.CloseIdleConnections()
 	out := make([]ExitIP, len(exitSources))
 	var wg sync.WaitGroup
 	for i, src := range exitSources {
@@ -337,6 +340,13 @@ func probeOneExit(ctx context.Context, c *http.Client, src ipSource) ExitIP {
 // 用 Range 0-0 只要 1 字节，够拿响应头又不产生流量。
 func ProbeHit(ctx context.Context, raw string) HitInfo {
 	h := HitInfo{URL: raw}
+	// 这里要跟着 URL 真发请求，所以和压测端点用同一套校验：
+	// 只认 http/https。少了这一步，`?url=file:///etc/passwd` 之类的输入
+	// 会被原样交给 http.Client，报错信息还会被当成「源连不上」显示出来。
+	if err := checkEndpointURL(raw); err != nil {
+		h.Err = err.Error()
+		return h
+	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" {
 		h.Err = "URL 格式不对"
@@ -720,6 +730,11 @@ func ProbeHits(ctx context.Context, urls []string, conc int) []HitInfo {
 		select {
 		case jobs <- i:
 		case <-ctx.Done():
+			// ctx 一断就没必要继续投递了：原先这里只是跳过当前这条，
+			// 剩下几十条还要各自空转一轮 select。
+			close(jobs)
+			wg.Wait()
+			return out
 		}
 	}
 	close(jobs)

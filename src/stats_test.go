@@ -79,7 +79,7 @@ func TestRingZeroCapacityFallsBack(t *testing.T) {
 // 便于精确控制「前 N 秒」这个判定。
 func statsWithSeries(base time.Time, series []Sample) *Stats {
 	st := NewStats()
-	st.StartAt = base
+	st.SetStartAt(base)
 	st.Running.Store(true)
 	for _, s := range series {
 		st.ring.Push(s)
@@ -213,7 +213,7 @@ func TestSnapshotRateIsZeroWhenIdle(t *testing.T) {
 func TestSnapshotElapsedFreezesAfterStop(t *testing.T) {
 	st := NewStats()
 	st.Reset()
-	st.StartAt = time.Now().Add(-10 * time.Second)
+	st.SetStartAt(time.Now().Add(-10 * time.Second))
 	st.Running.Store(true)
 	st.endAt.Store(time.Now().Add(-5 * time.Second).UnixMilli())
 	st.Running.Store(false)
@@ -240,7 +240,7 @@ func TestSnapshotAvgSkipsSlowStart(t *testing.T) {
 		t.Fatalf("开头 3 秒内不该给平均值，实际 %d", got)
 	}
 
-	st.StartAt = time.Now().Add(-10 * time.Second)
+	st.SetStartAt(time.Now().Add(-10 * time.Second))
 	got := st.Snapshot(0, "", nil).AvgRecv
 	if got < 90_000 || got > 110_000 {
 		t.Fatalf("平均值 %d，期望约 100000（1MB / 10s）", got)
@@ -313,7 +313,7 @@ func splitLines(b []byte) []string {
 func TestAvgAndTotalFreezeAfterFinalize(t *testing.T) {
 	st := NewStats()
 	st.Reset()
-	st.StartAt = time.Now().Add(-60 * time.Second)
+	st.SetStartAt(time.Now().Add(-60 * time.Second))
 	st.RecvBytes.Store(int64(60 * 125e6)) // 60s × 125MB/s ≈ 1 Gbps
 	st.peakRecv.Store(200e6)              // 峰值留够余量，确保不会被夹
 	st.Running.Store(false)
@@ -342,7 +342,7 @@ func TestAvgAndTotalFreezeAfterFinalize(t *testing.T) {
 func TestAvgNeverExceedsPeak(t *testing.T) {
 	st := NewStats()
 	st.Reset()
-	st.StartAt = time.Now().Add(-10 * time.Second)
+	st.SetStartAt(time.Now().Add(-10 * time.Second))
 	st.RecvBytes.Store(600e9) // 10 秒 600GB：明显不合理
 	st.peakRecv.Store(100e6)
 	st.Running.Store(false)

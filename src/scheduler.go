@@ -100,7 +100,10 @@ func (s *scheduler) sample(now time.Time) ratePoint {
 	s.lastTick, s.lastRec, s.lastSen = now, rec, sen
 
 	// 每流速率：调度器独占这些写入，worker 只写 bytes
-	for _, st := range s.e.Streams() {
+	streams := s.e.Streams()
+	live := make(map[int]struct{}, len(streams))
+	for _, st := range streams {
+		live[st.id] = struct{}{}
 		b := st.bytes.Load()
 		if prev, ok := s.lastBytes[st.id]; ok && dt > 0 {
 			v := int64(float64(b-prev) / dt)
@@ -110,6 +113,14 @@ func (s *scheduler) sample(now time.Time) ratePoint {
 			st.rate.Store(v)
 		}
 		s.lastBytes[st.id] = b
+	}
+	// 退出的流必须从 map 里摘掉。RestartStream 每次都给新 id，不清理的话
+	// 一天的补偿下来这里能攒出几十万条（每条约 40 字节 + map 开销），
+	// 而且每条都要参与遍历 —— 表面看是「跑久了内存缓慢上涨、调度变慢」。
+	for id := range s.lastBytes {
+		if _, ok := live[id]; !ok {
+			delete(s.lastBytes, id)
+		}
 	}
 
 	p := ratePoint{t: now, recv: rr, sent: rs, streams: s.e.StreamCount()}
@@ -121,7 +132,7 @@ func (s *scheduler) sample(now time.Time) ratePoint {
 }
 
 func (s *scheduler) evaluate(p ratePoint, now time.Time) {
-	elapsed := now.Sub(s.e.stats.StartAt).Seconds()
+	elapsed := now.Sub(s.e.stats.StartAt()).Seconds()
 	// 头 4 秒是 TCP 慢启动期，样本没有参考价值；同时等至少两条采样点落盘。
 	if elapsed < 4 {
 		return

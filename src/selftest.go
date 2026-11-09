@@ -48,6 +48,12 @@ type EnvInfo struct {
 // SelfTest 对一个 URL 做四层检测。
 func SelfTest(ctx context.Context, raw string) SiteTest {
 	st := SiteTest{URL: raw}
+	// 和压测端点同一套准入：否则 ftp:// 会被当成 80 端口明文连，
+	// 检测结果里出现「TCP 通、HTTP 失败」这种看不懂的组合。
+	if err := checkEndpointURL(raw); err != nil {
+		st.Verdict = "URL 不可用：" + err.Error()
+		return st
+	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
 		st.Verdict = "URL 格式不对，检查是不是少了 https://"

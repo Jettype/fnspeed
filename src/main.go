@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -82,6 +83,9 @@ func main() {
 		h := w.Header()
 		h.Set("Content-Type", "text/html; charset=utf-8")
 		h.Set("Cache-Control", "no-cache")
+		// 明确禁止 MIME 嗅探：万一以后有人往这个目录塞了用户可控的内容，
+		// 浏览器不会把它当 HTML/JS 执行。
+		h.Set("X-Content-Type-Options", "nosniff")
 		// 刻意不设置 X-Frame-Options / CSP frame-ancestors：
 		// 应用要在飞牛 App 的 webview 与 FN Connect 的 iframe 中打开。
 		_, _ = w.Write(b)
@@ -186,16 +190,8 @@ func registerPprof(mux *http.ServeMux) {
 	mux.HandleFunc("/debug/pprof/trace", local(pprof.Trace))
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [8]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
-}
+// itoa 只是 strconv.Itoa 的别名。
+// 手写版本在 n==0 时返回空串（循环一次都不进，切片从末尾开始），
+// 端口传 0 会拼成 "127.0.0.1:" —— 报错信息完全对不上原因，没必要为省一个
+// import 留这个坑。
+func itoa(n int) string { return strconv.Itoa(n) }

@@ -6,9 +6,10 @@ CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
 # 1. 可执行权限（app.tgz 解压后可能丢掉 x 位）
 [ -f "$BIN" ] && chmod 755 "$BIN" 2>/dev/null
 
-# 2. 配置初始化交给程序自己：首次启动时写入内置测速预设（etc/profiles.json），
-#    这里不预先写空文件，否则会被当成「用户已清空配置」。
-[ -f "$ETC/profiles.json" ] || log "profiles.json 不存在，首次启动将写入内置预设"
+# 2. 配置初始化交给程序自己：首次启动时写入内置测速预设 + 空用户区
+#    （etc/builtin.json + etc/user.json）。不要在这里预先造文件：
+#    1.5.0 及以前的 etc/profiles.json 会被程序当成旧格式改名丢弃。
+log "配置初始化由程序首次启动时完成"
 
 # 3. 内核调优：仅安装脚本以 root 运行时写入；失败不阻断安装
 if [ "$(id -u)" = "0" ] && [ -d /etc/sysctl.d ]; then
