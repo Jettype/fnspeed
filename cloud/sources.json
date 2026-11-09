@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-09.1",
+  "rev": "2026-11-09.2",
   "ttlSec": 21600,
-  "issuedAt": 1794203764,
+  "issuedAt": 1794204729,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "内部测试源，取自 1.5.9 实测量",
+  "notice": "内部测试源，2026-11 实测（新增 Vultr 全球 23 节点 1GB + 国内厂商 10 源）",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -222,6 +222,99 @@
       "group": "国外",
       "desc": "Cloudflare+OVH+Vultr 日/新/美/德+Cachefly，跨境最容易跑出峰值",
       "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-vultr-apac",
+      "name": "Vultr 亚太 · 5节点",
+      "group": "国外",
+      "desc": "大阪 / 首尔 / 悉尼 / 墨尔本 / 孟买，各 1GB。测国内出海到东亚、东南亚、南亚与澳洲的回程",
+      "mode": "down",
+      "downloadUrls": [
+        "https://osk-jp-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://sel-kor-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://syd-au-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://mel-au-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://bom-in-ping.vultr.com/vultr.com.1000MB.bin"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-vultr-eu",
+      "name": "Vultr 欧洲 · 7节点",
+      "group": "国外",
+      "desc": "伦敦 / 阿姆斯特丹 / 巴黎 / 马德里 / 华沙 / 斯德哥尔摩 / 曼彻斯特，各 1GB。欧洲回程多点对比",
+      "mode": "down",
+      "downloadUrls": [
+        "https://lon-gb-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://ams-nl-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://par-fr-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://mad-es-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://waw-pl-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://sto-se-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://man-uk-ping.vultr.com/vultr.com.1000MB.bin"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-vultr-am",
+      "name": "Vultr 美洲 · 9节点",
+      "group": "国外",
+      "desc": "洛杉矶 / 硅谷 / 西雅图 / 芝加哥 / 达拉斯 / 多伦多 / 墨西哥城 / 圣保罗 / 圣地亚哥，各 1GB。跨太平洋与美洲内陆",
+      "mode": "down",
+      "downloadUrls": [
+        "https://lax-ca-us-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://sjo-ca-us-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://wa-us-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://il-us-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://tx-us-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://tor-ca-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://mex-mx-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://sao-br-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://scl-cl-ping.vultr.com/vultr.com.1000MB.bin"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-vultr-mea",
+      "name": "Vultr 中东非 · 2节点",
+      "group": "国外",
+      "desc": "特拉维夫 / 约翰内斯堡，各 1GB。国内走这两地绕路多，用来验证高延迟链路的表现",
+      "mode": "down",
+      "downloadUrls": [
+        "https://tlv-il-ping.vultr.com/vultr.com.1000MB.bin",
+        "https://jnb-za-ping.vultr.com/vultr.com.1000MB.bin"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-vendor-mix",
+      "name": "国内厂商大文件 · 10源",
+      "group": "国内",
+      "desc": "百度 307/189MB + 移动和彩云 205MB + 支付宝 173MB + 网易 100/68MB + 抖音 95MB + 天翼云 75/64MB + 爱奇艺 63MB。覆盖百度/移动/阿里/网易/字节/电信/联通多家 CDN，单源跑不满就靠这个叠加",
+      "mode": "down",
+      "downloadUrls": [
+        "https://issuepcdn.baidupcs.com/issue/netdisk/yunguanjia/BaiduNetdisk_7.30.5.2.exe",
+        "https://issuecdn.baidupcs.com/issue/netdisk/apk/BaiduNetdiskSetup_wap_share.apk",
+        "https://yun.mcloud.139.com/mCloud/mCloud_11.2.2_24112201_000.apk",
+        "https://mdn.alipayobjects.com/ind_developertool/afts/file/A*fSAmSbgxLosAAAAAAAAAAAAADlx-AQ?af_fileName=AlipayKeyTool-2.0.3.dmg",
+        "https://static.ws.126.net/163/apk/newsapp/newsreader_netease_gw.apk",
+        "https://www.douyin.com/download/pc/obj/douyin-pc-client/7044145585217083655/releases/10715336/2.6.0/win32-ia32/douyin-v2.6.0-win32-ia32-douyinDownload1.exe",
+        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/5961fa22ee369eba433da6b0247eb11f",
+        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/50218cd4d2286623049e374061cffd0e",
+        "https://bdcdncnc.inter.71edge.com/cdn/pca/20231130/10.9.1.7348/channel/1701328986348/IQIYIsetup_z43.exe",
+        "https://mov.bn.netease.com/open-movie/nos/mp4/2018/08/02/SDN92R2SB_sd.mp4"
+      ],
+      "uploadUrls": [],
       "urlRotate": "sticky",
       "switchPolicy": "failover"
     },
