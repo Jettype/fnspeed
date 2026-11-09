@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-09.2",
+  "rev": "2026-11-09.3",
   "ttlSec": 21600,
-  "issuedAt": 1794204729,
+  "issuedAt": 1794206248,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "内部测试源，2026-11 实测（新增 Vultr 全球 23 节点 1GB + 国内厂商 10 源）",
+  "notice": "内部测试源，2026-11 实测（新增微软 / B站 / 字节三组，共 10 条大文件）",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -298,9 +298,9 @@
     },
     {
       "id": "cn-vendor-mix",
-      "name": "国内厂商大文件 · 10源",
+      "name": "国内厂商大文件 · 9源",
       "group": "国内",
-      "desc": "百度 307/189MB + 移动和彩云 205MB + 支付宝 173MB + 网易 100/68MB + 抖音 95MB + 天翼云 75/64MB + 爱奇艺 63MB。覆盖百度/移动/阿里/网易/字节/电信/联通多家 CDN，单源跑不满就靠这个叠加",
+      "desc": "百度 307/189MB + 移动和彩云 205MB + 支付宝 173MB + 网易 100/68MB + 天翼云 75/64/59/50MB + 爱奇艺 63MB。覆盖百度/移动/阿里/网易/电信/联通多家 CDN；抖音已单列到「字节」组",
       "mode": "down",
       "downloadUrls": [
         "https://issuepcdn.baidupcs.com/issue/netdisk/yunguanjia/BaiduNetdisk_7.30.5.2.exe",
@@ -308,11 +308,56 @@
         "https://yun.mcloud.139.com/mCloud/mCloud_11.2.2_24112201_000.apk",
         "https://mdn.alipayobjects.com/ind_developertool/afts/file/A*fSAmSbgxLosAAAAAAAAAAAAADlx-AQ?af_fileName=AlipayKeyTool-2.0.3.dmg",
         "https://static.ws.126.net/163/apk/newsapp/newsreader_netease_gw.apk",
-        "https://www.douyin.com/download/pc/obj/douyin-pc-client/7044145585217083655/releases/10715336/2.6.0/win32-ia32/douyin-v2.6.0-win32-ia32-douyinDownload1.exe",
         "https://desk.ctyun.cn/desktop/software/clientsoftware/download/5961fa22ee369eba433da6b0247eb11f",
         "https://desk.ctyun.cn/desktop/software/clientsoftware/download/50218cd4d2286623049e374061cffd0e",
         "https://bdcdncnc.inter.71edge.com/cdn/pca/20231130/10.9.1.7348/channel/1701328986348/IQIYIsetup_z43.exe",
         "https://mov.bn.netease.com/open-movie/nos/mp4/2018/08/02/SDN92R2SB_sd.mp4"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-microsoft",
+      "name": "微软 CDN · 4源",
+      "group": "国内",
+      "desc": "VS Code Windows 245MB / Linux deb 251MB（走 latest 接口，302 自动跟随，URL 永久有效，落地在国内金山云节点）+ .NET SDK 9.0 与 8.0 各 212MB（azureedge，固定版本号）",
+      "mode": "down",
+      "downloadUrls": [
+        "https://update.code.visualstudio.com/latest/win32-x64-user/stable",
+        "https://update.code.visualstudio.com/latest/linux-deb-x64/stable",
+        "https://dotnetcli.azureedge.net/dotnet/Sdk/9.0.100/dotnet-sdk-9.0.100-win-x64.exe",
+        "https://dotnetcli.azureedge.net/dotnet/Sdk/8.0.404/dotnet-sdk-8.0.404-win-x64.exe"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-bilibili",
+      "name": "B站 · 5源",
+      "group": "国内",
+      "desc": "dl.hdslb.com 官方客户端：安卓 64 位 231MB、通用 183MB、macOS 182MB、安卓 HD 122MB、必剪 42MB。mobile/latest 路径跟随版本自动更新，不用改清单",
+      "mode": "down",
+      "downloadUrls": [
+        "https://dl.hdslb.com/mobile/latest/android64/iBiliPlayer-bili.apk",
+        "https://dl.hdslb.com/mobile/latest/iBiliPlayer-bili.apk",
+        "https://dl.hdslb.com/mobile/fixed/pc_electron_mac/bili_mac.dmg",
+        "https://dl.hdslb.com/mobile/latest/android_hd/iBiliPlayer-bili.apk",
+        "https://dl.hdslb.com/mobile/latest/android_bilithings_super/bilithings-master.apk"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-bytedance",
+      "name": "字节 · 抖音 PC",
+      "group": "国内",
+      "desc": "抖音 PC 客户端 95MB。字节系其余产品（飞书/剪映/豆包）下载页均为 JS 渲染、直链带签名，目前只探到这一条可长连直取",
+      "mode": "down",
+      "downloadUrls": [
+        "https://www.douyin.com/download/pc/obj/douyin-pc-client/7044145585217083655/releases/10715336/2.6.0/win32-ia32/douyin-v2.6.0-win32-ia32-douyinDownload1.exe"
       ],
       "uploadUrls": [],
       "urlRotate": "sticky",
