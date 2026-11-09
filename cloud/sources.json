@@ -1,0 +1,259 @@
+{
+  "format": "FNS_CLOUD_SOURCES",
+  "version": 1,
+  "rev": "2026-11-09.1",
+  "ttlSec": 21600,
+  "issuedAt": 1794203764,
+  "minAppVersion": "1.6.0-alpha",
+  "mode": "replace",
+  "notice": "内部测试源，取自 1.5.9 实测量",
+  "profiles": [
+    {
+      "id": "cn-tencent",
+      "name": "腾讯 CDN · 3源",
+      "downloadUrls": [
+        "https://dlied4.myapp.com/myapp/1104466820/cos.release-40109/10040714_com.tencent.tmgp.sgame_a2480356_8.2.1.9_F0BvnI.apk",
+        "https://dldir1.qq.com/weixin/Windows/WeChatSetup.exe",
+        "https://dldir1.qq.com/weixin/Windows/WeChatSetup_x86.exe"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国内",
+      "desc": "王者荣耀安装包 1.9GB + 微信 PC/x86，腾讯自建分发，不拦不限",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-aliyun",
+      "name": "阿里 CDN · npmmirror 4源",
+      "downloadUrls": [
+        "https://registry.npmmirror.com/-/binary/node/v18.20.4/node-v18.20.4.tar.gz",
+        "https://registry.npmmirror.com/-/binary/node/v22.11.0/node-v22.11.0.tar.gz",
+        "https://registry.npmmirror.com/-/binary/electron/v22.0.0/electron-v22.0.0-linux-x64.zip",
+        "https://registry.npmmirror.com/-/binary/electron/v28.0.0/electron-v28.0.0-win32-x64.zip"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国内",
+      "desc": "node/electron 大包 81–111MB，走阿里云 CDN，国内海外都稳",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-xunlei",
+      "name": "迅雷 CDN · 2源",
+      "downloadUrls": [
+        "https://down.sandai.net/thunder11/XunLeiSetup12.0.6.2440.exe",
+        "https://down.sandai.net/thunder11/XunLeiWebSetup.exe"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国内",
+      "desc": "迅雷安装包 172MB + 13MB，自建分发节点",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-apple",
+      "name": "苹果 CDN",
+      "downloadUrls": [
+        "https://updates.cdn-apple.com/2019WinterFCS/fullrestores/041-39257/32129B6C-292C-11E9-9E72-4511412B0A59/iPhone_4.7_12.1.4_16D57_Restore.ipsw"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国内",
+      "desc": "2.9GB iOS 固件，苹果自有 CDN，境内速度最好的一条",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-game",
+      "name": "游戏 CDN · 鹰角",
+      "downloadUrls": [
+        "https://ak.hypergryph.com/downloads/android_lastest"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国内",
+      "desc": "1.8GB 明日方舟安卓包，走字节跳动 CDN，官方 latest 别名不会随版本失效",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-multi",
+      "name": "国内十一源聚合 ⭐",
+      "downloadUrls": [
+        "https://dlied4.myapp.com/myapp/1104466820/cos.release-40109/10040714_com.tencent.tmgp.sgame_a2480356_8.2.1.9_F0BvnI.apk",
+        "https://dldir1.qq.com/weixin/Windows/WeChatSetup.exe",
+        "https://dldir1.qq.com/weixin/Windows/WeChatSetup_x86.exe",
+        "https://registry.npmmirror.com/-/binary/node/v18.20.4/node-v18.20.4.tar.gz",
+        "https://registry.npmmirror.com/-/binary/node/v22.11.0/node-v22.11.0.tar.gz",
+        "https://registry.npmmirror.com/-/binary/electron/v22.0.0/electron-v22.0.0-linux-x64.zip",
+        "https://registry.npmmirror.com/-/binary/electron/v28.0.0/electron-v28.0.0-win32-x64.zip",
+        "https://down.sandai.net/thunder11/XunLeiSetup12.0.6.2440.exe",
+        "https://down.sandai.net/thunder11/XunLeiWebSetup.exe",
+        "https://updates.cdn-apple.com/2019WinterFCS/fullrestores/041-39257/32129B6C-292C-11E9-9E72-4511412B0A59/iPhone_4.7_12.1.4_16D57_Restore.ipsw",
+        "https://ak.hypergryph.com/downloads/android_lastest"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国内",
+      "desc": "腾讯 3 + 阿里 4 + 迅雷 2 + 苹果 1 + 鹰角 1，任意一个挂了自动换源，最容易跑满",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-cf",
+      "name": "Cloudflare",
+      "downloadUrls": [
+        "https://speed.cloudflare.com/__down?during=download&bytes=99999999"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "100MB 循环，全球 Anycast，最稳的跨境基准",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-ovh",
+      "name": "OVH 欧洲",
+      "downloadUrls": [
+        "https://proof.ovh.net/files/100Mb.dat"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "100MB 单文件，法国节点，测欧洲回程",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-vultr-jp",
+      "name": "Vultr 东京",
+      "downloadUrls": [
+        "https://hnd-jp-ping.vultr.com/vultr.com.100MB.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "100MB，日本节点，国内出海最近的一跳",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-vultr-sg",
+      "name": "Vultr 新加坡",
+      "downloadUrls": [
+        "https://sgp-ping.vultr.com/vultr.com.100MB.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "100MB，新加坡节点，东南亚出口",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-vultr-us",
+      "name": "Vultr 美东",
+      "downloadUrls": [
+        "https://nj-us-ping.vultr.com/vultr.com.100MB.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "100MB，新泽西节点，测美东回程",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-vultr-de",
+      "name": "Vultr 法兰克福",
+      "downloadUrls": [
+        "https://fra-de-ping.vultr.com/vultr.com.100MB.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "100MB，德国节点，测欧洲回程",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-multi",
+      "name": "海外六源聚合 ⭐",
+      "downloadUrls": [
+        "https://speed.cloudflare.com/__down?during=download&bytes=99999999",
+        "https://proof.ovh.net/files/100Mb.dat",
+        "https://hnd-jp-ping.vultr.com/vultr.com.100MB.bin",
+        "https://sgp-ping.vultr.com/vultr.com.100MB.bin",
+        "https://nj-us-ping.vultr.com/vultr.com.100MB.bin",
+        "https://fra-de-ping.vultr.com/vultr.com.100MB.bin",
+        "https://cachefly.cachefly.net/100mb.test"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "Cloudflare+OVH+Vultr 日/新/美/德+Cachefly，跨境最容易跑出峰值",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "up-cf",
+      "name": "Cloudflare 上传",
+      "downloadUrls": [],
+      "uploadUrls": [
+        "https://speed.cloudflare.com/__up"
+      ],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "上传",
+      "desc": "公共可写端点，无需自建接收端，直接测上行",
+      "mode": "up",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "up-sink",
+      "name": "本机 sink（需改 IP）",
+      "downloadUrls": [],
+      "uploadUrls": [
+        "http://127.0.0.1:8977/up"
+      ],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "上传",
+      "desc": "把 127.0.0.1 改成 NAS 局域网 IP，或用自建云端 sink",
+      "mode": "up",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    }
+  ]
+}
