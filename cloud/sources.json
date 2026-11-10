@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-09.5",
+  "rev": "2026-11-10.1",
   "ttlSec": 21600,
-  "issuedAt": 1794212079,
+  "issuedAt": 1794311956,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "内部测试源，2026-11 实测（米哈游分卷 / DataPacket 全球 / LibreSpeed 下载+上传 / OVH 10GB）",
+  "notice": "内部测试源，2026-11 实测（新增库洛鸣潮 / 完美世界 / 网易逆水寒；微软剔除两条慢源）",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -319,15 +319,13 @@
     },
     {
       "id": "cn-microsoft",
-      "name": "微软 CDN · 4源",
+      "name": "微软 · .NET SDK 2源",
       "group": "国内",
-      "desc": "VS Code Windows 245MB / Linux deb 251MB（走 latest 接口，302 自动跟随，URL 永久有效，落地在国内金山云节点）+ .NET SDK 9.0 与 8.0 各 212MB（azureedge，固定版本号）",
+      "desc": "dotnet-sdk 8.0.404 211.9MB、9.0.100 212.8MB（azureedge，固定版本号）。实测 351 / 102 Mbps。原先的 VS Code 两条（update.code.visualstudio.com/latest/…）实测只有 22–23Mbps —— 它 302 到 vscode.download.prss.microsoft.com（Azure Front Door），国内出口绕得厉害，已剔除。微软系国内没有快 CDN，这组只留能跑起来的两条。",
       "mode": "down",
       "downloadUrls": [
-        "https://update.code.visualstudio.com/latest/win32-x64-user/stable",
-        "https://update.code.visualstudio.com/latest/linux-deb-x64/stable",
-        "https://dotnetcli.azureedge.net/dotnet/Sdk/9.0.100/dotnet-sdk-9.0.100-win-x64.exe",
-        "https://dotnetcli.azureedge.net/dotnet/Sdk/8.0.404/dotnet-sdk-8.0.404-win-x64.exe"
+        "https://dotnetcli.azureedge.net/dotnet/Sdk/8.0.404/dotnet-sdk-8.0.404-win-x64.exe",
+        "https://dotnetcli.azureedge.net/dotnet/Sdk/9.0.100/dotnet-sdk-9.0.100-win-x64.exe"
       ],
       "uploadUrls": [],
       "urlRotate": "sticky",
@@ -380,6 +378,55 @@
       "group": "国内",
       "desc": "原神 5.5.0 每卷 10GB（腾讯 COS）、绝区零 3.2.0 每卷 7.4GB（字节 CDN）、星穹铁道 4.4.0 每卷 7.0GB。单卷就能跑满千兆 60 秒不用重连。实测原神 .001 会偶发 404（CDN 节点缓存不一致，重试或换卷即可），故用 .002/.003。URL 带版本时间戳目录，游戏更新即失效 —— 用官方 API 取最新：hyp-api.mihoyo.com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1&game_ids[]=1Z8W5NHUQb（原神）/64kMb5iAWu（星铁）/x6znKlJ0xK（绝区零）",
       "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-kuro",
+      "name": "库洛 · 鸣潮 · 5源",
+      "group": "国内",
+      "desc": "《鸣潮》3.7.1 PC 客户端 pak 分卷：AWS 与腾讯云节点各 6.6GB / 5.2GB，火山引擎（字节 CDN）6.6GB / 4.0GB，另有 18.5GB 的 HD 大包。实测 AWS 356Mbps、腾讯云 75Mbps、火山 51Mbps —— 同一份文件在三个 CDN 上差异很大，所以三条都留。URL 带版本号（3.7.1 + 哈希），游戏更新即失效，用启动器接口重取：GET prod-alicdn-gamestarter.kurogame.com/launcher/launcher/50004_obOHXFrFanqsaIEOmuKroCcbZkQRBC7c/G153/index.json 拿 resourcesBasePath，再取 …/resource/50004/<version>/indexFile.json 里的 dest，拼 {cdn}/{basePath}/{dest}",
+      "mode": "down",
+      "downloadUrls": [
+        "https://hw-pcdownload-aws.aki-game.net/launcher/game/G153/50004/3.7.1/GaUZSLrSAhPlLIGlqnOwBARuqhyqBKPA/zip/Client/Content/Paks/pakchunk0-WindowsNoEditor.pak",
+        "https://hw-pcdownload-aws.aki-game.net/launcher/game/G153/50004/3.7.1/GaUZSLrSAhPlLIGlqnOwBARuqhyqBKPA/zip/Client/Content/Paks/pakchunk70-WindowsNoEditor.pak",
+        "https://hw-pcdownload-qcloud.aki-game.net/launcher/game/G153/50004/3.7.1/GaUZSLrSAhPlLIGlqnOwBARuqhyqBKPA/zip/Client/Content/HD/pakchunk70-HD-WindowsNoEditor.pak",
+        "https://pcdownload-huoshan.aki-game.net/launcher/game/G153/50004/3.7.1/GaUZSLrSAhPlLIGlqnOwBARuqhyqBKPA/zip/Client/Content/Paks/pakchunk0-WindowsNoEditor.pak",
+        "https://pcdownload-huoshan.aki-game.net/launcher/game/G153/50004/3.7.1/GaUZSLrSAhPlLIGlqnOwBARuqhyqBKPA/zip/Client/Content/HD/pakchunk7-HD-WindowsNoEditor.pak"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-wanmei",
+      "name": "完美世界 · 客户端 1源",
+      "group": "国内",
+      "desc": "《完美世界》完整客户端 rar，9.0GB，实测 360Mbps。路径带日期（wanmei_20260910），官方发新版会换名，失效后去 world2.wanmei.com/download/index.shtml 取新地址",
+      "mode": "down",
+      "downloadUrls": [
+        "https://world2dl.wmupd.com/wm/client/wanmei_20260910.rar"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-netease",
+      "name": "网易 · 逆水寒 1源",
+      "group": "国内",
+      "desc": "《逆水寒》NGP 客户端 204MB，实测 384Mbps（nsh.gdl.netease.com，openresty）。同域的《永劫无间》完整包 d90.gdl.netease.com 有 83GB 但带防盗链，直连返回 403，没收录",
+      "mode": "down",
+      "downloadUrls": [
+        "https://nsh.gdl.netease.com/NGP/update/NGP_NSH_Official_zhCN_3.0.1563.exe"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
       "urlRotate": "sticky",
       "switchPolicy": "failover"
     },

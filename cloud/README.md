@@ -9,12 +9,12 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 ```
 
 填进侧栏「云端源」即可（命令行是 `POST /api/settings` 的 `cloudEndpoint`）。
-现在 31 个配置集 / 135 条端点。**标了速度的都是用 fnspeed 自己真跑出来的**（并发 2、8 秒，
+现在 34 个配置集 / 140 条端点。**标了速度的都是用 fnspeed 自己真跑出来的**（并发 2–8、8–10 秒，
 本机出口上限约 400Mbps），不是探活就算过。
 
 | 分组 | 内容 |
 |---|---|
-| 国内 | 腾讯 3 / 阿里 4 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十一源聚合 11 / 厂商大文件 9 / 微软 4 · B站 5 · 字节 1 / **米哈游 6 · 大文件补充 4** |
+| 国内 | 腾讯 3 / 阿里 4 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十一源聚合 11 / 厂商大文件 9 / 微软 2 · B站 5 · 字节 1 / **米哈游 6 · 库洛 5 · 完美 1 · 网易 1** / 大文件补充 4 |
 | 国外 | Cloudflare / OVH / Vultr 单点 4 / 海外六源聚合 7 / Vultr 亚太 5·欧洲 7·美洲 9·中东非 2 / **DataPacket 亚太 3·欧洲 9·北美 7 / 10GB 档 5 / LibreSpeed 11** |
 | 上传 | **LibreSpeed 11** / Cloudflare `__up` / 本机 sink |
 
@@ -24,6 +24,10 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 |---|---|---|
 | 绝区零分卷 7.4GB | **402 Mbps** | 字节 CDN，最快的一条 |
 | 王者荣耀 1968MB | 380 Mbps | 只有「自适应」线路可用 |
+| 网易逆水寒 204MB | 384 Mbps | `nsh.gdl.netease.com`，openresty |
+| 完美世界 9.0GB | 360 Mbps | `world2dl.wmupd.com` |
+| 库洛鸣潮 pak 6.6GB | 356 Mbps | AWS 节点；同文件腾讯云 75、火山 51 |
+| 微软 .NET SDK 8.0 | 351 Mbps | azureedge |
 | 米哈游原神分卷 10GB | 327 Mbps | 腾讯 COS |
 | 星铁分卷 7.0GB | 269 Mbps | |
 | 学习强国 266MB | 142 Mbps | `latest/` 路径，不随版本变 |
@@ -33,6 +37,21 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 | DataPacket 法兰克福 / 香港 | 36 / 26 Mbps | 19 节点全通但普遍慢 |
 | Hivelocity 10GiB | 32 Mbps | |
 | truefilesize 1GB | 7 Mbps | 但 CC0 许可最干净 |
+
+2026-11 第三轮：按游戏大厂补的四组（实测速度都很好）
+
+- **库洛 · 鸣潮**（5 条）：PC 客户端 pak 分卷，AWS / 腾讯云 / 火山引擎三条 CDN 挂同一份文件。
+  最大的是 18.5GB 的 HD 包。**同一文件三个 CDN 差距很大**（AWS 356、腾讯云 75、火山 51 Mbps），
+  所以三条都留。URL 带 `3.7.1` 版本目录和随机哈希，游戏更新即失效，重取方法写在 desc 里：
+  先取 `launcher/launcher/50004_…/G153/index.json` 拿 `resourcesBasePath`，
+  再取 `…/resource/50004/<version>/indexFile.json` 拿 `dest`，拼 `{cdn}/{basePath}/{dest}`
+- **完美世界**（1 条）：`world2dl.wmupd.com` 完整客户端 9.0GB，360Mbps
+- **网易**（1 条）：`nsh.gdl.netease.com` 逆水寒 NGP 204MB，384Mbps。
+  同域的《永劫无间》完整包有 83GB，但**带防盗链，直连 403**，没收录
+- **鹰角**（原有）：`ak.hypergryph.com/downloads/android_lastest` 也是 365Mbps，属于 `latest` 语义
+
+**微软那组做了减法**：VS Code 两条实测只有 22–23Mbps（302 到 Azure Front Door，
+国内绕得厉害），已删除，只留 .NET SDK 8.0（351Mbps）和 9.0（102Mbps）。
 
 2026-11 第二轮扩充的四个组：
 
@@ -54,10 +73,10 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 
 ### 第一轮扩充的三个组（微软 / B站 / 字节）
 
-- **微软**：VS Code Windows 245MB / Linux deb 251MB 走 `update.code.visualstudio.com/latest/...`，
-  这个是 302 跳转到当前版本的 CDN 地址，**URL 永久有效**，版本更新不用改清单；
-  落地节点是金山云广州（响应头 `Default-server-KS-CLOUD-GZ`），国内速度好。
-  .NET SDK 9.0 / 8.0 各 212MB 用 azureedge 固定版本号，升级时要手动换
+- **微软**：.NET SDK 8.0 / 9.0 各 212MB，`dotnetcli.azureedge.net` 固定版本号，升级时要手动换。
+  实测 351 / 102 Mbps。原先还有 VS Code 两条（`update.code.visualstudio.com/latest/...`，
+  URL 永久有效、302 到当前版本），2026-11 复测**只有 22–23 Mbps** 已剔除 ——
+  那个 302 的落点会漂到 Azure Front Door，落到金山云广州还是绕出国全看运气
 - **B站**：`dl.hdslb.com/mobile/latest/...` 同样是「最新版」语义，安卓 64 位 231MB、
   通用 183MB、macOS 182MB、安卓 HD 122MB、必剪 42MB。注意 Windows 客户端
   `bili_win-install.exe` 返回 403，只有移动端和 mac 能直取
