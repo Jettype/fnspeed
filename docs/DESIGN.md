@@ -288,7 +288,7 @@ atomic 自增，1Gbps 下约 1500 次/秒，可以忽略。真正能左右占用
 - `sysctl` 调优需要 root；非 root 时静默跳过，socket buffer 受系统默认 `rmem_max` 约束（通常 208KB），长肥管道下吞吐会受限。
 - 性能目标「8 核跑满 10G」只在**本机回环**验证过（8–10 GB/s）。真实 10G 网卡受中断合并、NUMA、PCIe 带宽影响，未在物理 10G 环境验证。
 - 前端在 485px 以上验证通过。桌面 Chrome 无头模式的窗口最小宽度就是 485px，390px 视口无法用该方式截图；CSS 内无固定最小宽度，理论上不会溢出。
-- 内核调优（`net.core.rmem_max`、`tcp_congestion_control=bbr` 等）由 `install_callback` 在**以 root 执行安装脚本时**写入 `/etc/sysctl.d/99-fnspeed.conf`；应用本体以 `package` 用户运行，不依赖 root。若应用中心的安装脚本非 root 执行，该文件不会生成，需手工执行 `sysctl` 命令。
+- 内核调优（`net.core.rmem_max`、`tcp_congestion_control=bbr` 等）写进 `/etc/sysctl.d/99-fnspeed.conf`，有两条路径：`cmd/install_callback` 在**以 root 执行安装脚本时**写，`src/tune.go: ApplyKernelTuning` 在以 root 启动程序时核对一次。两处内容必须逐字一致（`tools/check_sysctl.sh` 在 CI 里卡这一条），否则每次启动都会重写一次该文件。应用本体以 `package` 用户运行，正常安装后不依赖 root。若应用中心的安装脚本非 root 执行，该文件不会生成，需手工执行 `sysctl` 命令。
 
 ## 10. 安全边界
 

@@ -89,6 +89,18 @@ jobs:
           fi
           echo "提交邮箱均为 noreply，OK"
 
+  consistency:
+    name: 配置一致性自检
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # src/tune.go 与 cmd/install_callback 写同一个 /etc/sysctl.d/99-fnspeed.conf。
+      # 内容一旦漂移，ApplyKernelTuning 的「读出来比对」永远不成立，
+      # 每次以 root 启动都会白写一次盘，而且现场看不出来。
+      - name: sysctl 配置两处一致
+        run: ./tools/check_sysctl.sh
+
   package:
     name: build.sh 打包完整性
     runs-on: ubuntu-latest

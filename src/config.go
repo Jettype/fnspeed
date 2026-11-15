@@ -54,16 +54,12 @@ type Profile struct {
 }
 
 // Config 是导入/导出的顶层结构。
+// 老备份里的 presetRev 等未知字段由 encoding/json 默认忽略，不需要为它们留占位。
 type Config struct {
 	Format            string    `json:"format"`
 	Version           int       `json:"version"`
 	SelectedProfileID string    `json:"selectedProfileId"`
 	Profiles          []Profile `json:"profiles"`
-
-	// PresetRev 是 1.5.0 及以前用来判断「预设要不要补」的版本号。
-	// 1.5.1 起默认区改成按内容 hash 整体覆盖，这个字段不再读也不再写，
-	// 仅保留在结构体里，避免导入老备份时报未知字段。
-	PresetRev int `json:"presetRev,omitempty"`
 }
 
 // ParseConfig 解析并规范化配置。

@@ -37,12 +37,11 @@ type SiteTest struct {
 }
 
 // EnvInfo 给前端展示本机网络环境，很多"连不上"其实是 DNS 配错。
+// 只放前端真正会渲染的字段：多一个字段就多一份没人维护的序列化契约。
 type EnvInfo struct {
-	ResolvConf string   `json:"resolvConf"` // 实际生效的 nameserver 列表
 	DNSServers []string `json:"dnsServers"`
 	Gateway    string   `json:"gateway"`
 	HTTPProxy  string   `json:"httpProxy"`
-	Interface  string   `json:"interface"`
 }
 
 // SelfTest 对一个 URL 做四层检测。
@@ -248,10 +247,6 @@ func EnvProbe() EnvInfo {
 				e.DNSServers = append(e.DNSServers, f[1])
 			}
 		}
-	}
-	e.ResolvConf = strings.TrimSpace(string(raw))
-	if len(e.ResolvConf) == 0 {
-		e.ResolvConf = "(/etc/resolv.conf 读不到)"
 	}
 	e.Gateway = defaultGateway()
 	e.HTTPProxy = strings.TrimSpace(os.Getenv("HTTPS_PROXY"))

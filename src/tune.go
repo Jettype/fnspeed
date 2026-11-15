@@ -11,8 +11,11 @@ import (
 
 const sysctlPath = "/etc/sysctl.d/99-fnspeed.conf"
 
+// sysctlBody 必须与 cmd/install_callback 里的 heredoc 逐字一致。
+// 两处写的是同一个文件：内容相同才能靠「读出来比对」跳过重写，
+// 一旦首行注释有差异，每次以 root 启动都会白写一次盘。
 const sysctlBody = `# fnspeed 带宽压测：加大 socket 缓冲 + BBR
-# 由 start_init 写入，uninstall 不清除（可能被其他服务复用）
+# 由 install_callback 在安装时写入；以 root 启动时本程序会校正一次。卸载不清除。
 net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
 net.ipv4.tcp_rmem = 4096 262144 16777216
@@ -21,7 +24,7 @@ net.ipv4.tcp_congestion_control = bbr
 `
 
 // ApplyKernelTuning 写入 sysctl 配置并立即生效。
-// 非 root 时静默跳过，只打一条日志。
+// 非 root 时静默跳过 —— 应用中心安装时已由 install_callback 以 root 写过一次。
 func ApplyKernelTuning() {
 	if os.Geteuid() != 0 {
 		log.Println("非 root 运行，跳过内核参数调优（socket 缓冲区将受系统默认上限约束）")

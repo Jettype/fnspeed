@@ -62,6 +62,3 @@ func safeGo(where string, fn func()) {
 		fn()
 	}()
 }
-
-// CrashCount 供 /api/status 暴露，前端可以提示「本次运行有过 N 次内部异常」。
-func CrashCount() int64 { return crashCount.Load() }

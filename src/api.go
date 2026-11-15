@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -706,17 +705,6 @@ func readAllLimited(r *http.Request, max int64) ([]byte, error) {
 		}
 	}
 	return buf, nil
-}
-
-func parseIntDefault(s string, def int) int {
-	if s == "" {
-		return def
-	}
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		return def
-	}
-	return n
 }
 
 // ---------------- 网络自检 ----------------

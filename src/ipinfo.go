@@ -451,6 +451,8 @@ func cdnOf(host string, hdr http.Header) (cdn, colo string) {
 	}
 
 	lhost := strings.ToLower(host)
+	// 后缀匹配用「域名的一部分」而不是整段相等，因为 CNAME 目标常是三级以上子域。
+	// 顺序有意义：更像的写在前面（alicdn 先于 aliyun）。
 	hostRules := []struct{ suffix, name string }{
 		{"vultr.com", "Vultr"},
 		{"linode.com", "Linode"},
@@ -459,15 +461,13 @@ func cdnOf(host string, hdr http.Header) (cdn, colo string) {
 		{".ovh.us", "OVH"},
 		{"datapacket.com", "CDN77"},
 		{"cloudfront.net", "AWS CloudFront"},
-		{"myapp.com", "腾讯云 CDN"},
+		{"dnsv1.com", "腾讯云 CDN"},
 		{"alicdn.com", "阿里云 CDN"},
 		{"aliyun.com", "阿里云"},
 		{"xuexi.cn", "阿里云 CDN"},
 		{"huaweicloud.com", "华为云"},
 		{"cloudflare.com", "Cloudflare"},
 		{"cloudflare.net", "Cloudflare"},
-		{"tuna.tsinghua.edu.cn", "清华 TUNA"},
-		{"ustc.edu.cn", "中科大镜像"},
 		{"cachefly.net", "Cachefly"},
 	}
 	for _, r := range hostRules {

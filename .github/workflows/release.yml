@@ -49,9 +49,12 @@ jobs:
         run: python3 -m pip install --upgrade Pillow
 
       - name: 校验 tag 与 build.sh 版本号一致
+        env:
+          # 用 env 传而不是内联到脚本里：tag 名若含引号不会破坏 shell 语法。
+          # 手动触发时 github.ref_name 是分支名（main），必须优先取 inputs.tag。
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          TAG='${{ inputs.tag || github.ref_name }}'
           VER="${TAG#v}"
           SH_VER=$(sed -nE 's/^VER="?([^"]+)"?$/\1/p' build.sh | head -1)
           echo "tag=$TAG  build.sh VER=$SH_VER"
@@ -68,9 +71,14 @@ jobs:
         run: bash ./build.sh
 
       - name: 校验产物
+        env:
+          # 这里曾经直接读 GITHUB_REF_NAME —— 手动触发时那是分支名（main），
+          # 于是去找 dist/fnspeed_x86_main.fpk 并报「缺少产物」。
+          # 与上一步保持同一口径。
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          VER="${GITHUB_REF_NAME#v}"
+          VER="${TAG#v}"
           fail=0
           for plat in x86 arm; do
             f="dist/fnspeed_${plat}_${VER}.fpk"

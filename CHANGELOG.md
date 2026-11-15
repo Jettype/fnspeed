@@ -47,6 +47,57 @@
 - `ci.yml` 加 `permissions: contents: read` 与 `concurrency`（同 ref 连续推送取消上一轮），
   并把「校验 manifest 版本号」从「非空即过」改成真的与 `build.sh` 的 `VER` 比对
 
+### 全仓扫描后的修补
+
+上一轮只审了 `src/` 的一半。这一轮把 `cmd/`（10 个生命周期脚本）、`config/`、`sink/`
+以及 `src/` 剩下 11 个文件共 3522 行逐行读完，修掉扫出来的问题。
+
+**修：发布流水线的手动重发路径**
+
+`release.yml` 的「校验产物」步骤读的是 `GITHUB_REF_NAME`。手动触发（`workflow_dispatch`）时
+那是分支名（`main`），于是它去找 `dist/fnspeed_x86_main.fpk`，报「缺少产物」直接失败 ——
+也就是说「用 `workflow_dispatch` 指定 tag 重发」这条路从来没通过。同一文件另两处用的是
+`inputs.tag || github.ref_name`，只有这一处漏了。现在统一成 `TAG` 环境变量传参，
+顺带避免 tag 名含引号时破坏 shell 语法。
+
+**修：内核参数配置每次启动都被重写**
+
+`src/tune.go` 与 `cmd/install_callback` 往同一个 `/etc/sysctl.d/99-fnspeed.conf` 写，
+但两处首行注释不同。`ApplyKernelTuning` 靠「把文件读出来和常量比对」决定要不要写，
+内容不一致就意味着判断永远不成立 → 每次以 root 启动都白写一次盘。现在两边逐字相同，
+并新增 `tools/check_sysctl.sh` 在 CI 里卡这一条，防止下次再漂移。
+
+顺带把 `tune.go` 里「由 start_init 写入」的注释改对了 —— `cmd/` 下从来没有 `start_init`。
+`docs/DESIGN.md` 对这条路径的描述也补全成「`install_callback` 与启动时核对两条」。
+
+**删：11 处死代码**
+
+| 位置 | 删掉的东西 |
+|---|---|
+| `guard.go` | `CrashCount()`：注释称「供 /api/status 暴露」，实际没有任何调用点 |
+| `api.go` | `parseIntDefault()` 与其 `strconv` 导入 |
+| `selftest.go` | `EnvInfo.Interface`（从未赋值）、`EnvInfo.ResolvConf`（前端不读） |
+| `config.go` | `Config.PresetRev`：1.5.1 起不再读写。原注释说「避免导入老备份报未知字段」，但 `encoding/json` 本就忽略未知字段 |
+| `sink/main.go` | `asNetErr()` 与 `handleUp` 里那个空 `if`（`io.Copy` 的错误从来不处理，却写了 11 行）；`listenAdr` 全局变量改成直接用 `*addr` |
+| `ipinfo.go` | `cdnOf` 里清华 TUNA / 中科大两条规则（对应的高校源早已全部移除） |
+
+`probe.go` 里两个返回完全相同值的分支合并成一个，顺带消除「`StatusOK` 却带 `Err`」的自相矛盾。
+
+**修：一条 CDN 识别规则写错了**
+
+`cdnOf` 把 `myapp.com` 映射成腾讯云 CDN。`myapp.com` 是通用示例域名，不是腾讯云 CDN 的
+CNAME 后缀，任何含这个串的域名都会被误判成腾讯云。改成真实的 `dnsv1.com`。
+
+**没动的**
+
+`initTheme()` 一开始被自动检测列为「未调用」，复核后发现它是具名 IIFE
+（`(function initTheme(){…})()`），定义即执行 —— 删掉主题切换就废了。这类误报要人看一眼再动手。
+
+`build.sh` 把 `ui/` 同时放进 `app.tgz` 内和 fpk 顶层、`config/resource` 里的空
+`systemd-unit` 对象，都需要先核对 fnOS 官方规范才能判断能不能收，这一轮不动。
+
+验证：gofmt / vet / 双架构编译 / 84 个单测（1 个已知 Windows 差异）/ 隐私门禁 / 打包全部通过。
+
 ## 1.6.0 — 2026-11-15
 
 本版原以 `1.6.0-alpha` 作内部验证版，验证通过后直接转正，未另起 1.6.1 —— 相对 1.5.9

@@ -117,9 +117,9 @@ func doProbe(ctx context.Context, ep Endpoint, withReferer, withRange bool) Prob
 		if resp.ContentLength > 0 {
 			return ProbeResult{Mode: ModeFileLoop, Status: StatusOK, Size: resp.ContentLength}
 		}
-		if resp.ContentLength == 0 && resp.Header.Get("Content-Length") == "0" {
-			return ProbeResult{Mode: ModeStream, Status: StatusOK, Err: "响应体为空"}
-		}
+		// Content-Length 缺失 → chunked 长流，按流式跑。
+		// 显式为 0 也走这里：预检阶段不判死，真跑起来第一个字节就会失败并触发 failover，
+		// 比在预检里给一个「StatusOK 却带 Err」的自相矛盾结果更清楚。
 		return ProbeResult{Mode: ModeStream, Status: StatusOK}
 
 	case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized:

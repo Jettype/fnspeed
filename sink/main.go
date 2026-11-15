@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -21,23 +20,21 @@ import (
 )
 
 var (
-	block     = make([]byte, 1<<20) // 1MB 随机块，进程内复用
-	token     string
-	maxBytes  int64
-	listenAdr string
-	rateMB    float64
+	block    = make([]byte, 1<<20) // 1MB 随机块，进程内复用
+	token    string
+	maxBytes int64
+	rateMB   float64
 )
 
 func main() {
 	var (
-		addr  = flag.String("addr", ":8977", "监听地址")
-		tok   = flag.String("token", "", "访问 token；为空则从环境变量 FNS_SPEED_TOKEN 读取，仍为空表示不校验")
-		maxGB = flag.Float64("max-gb", 50, "单请求最大字节数（GB）")
+		addr     = flag.String("addr", ":8977", "监听地址")
+		tok      = flag.String("token", "", "访问 token；为空则从环境变量 FNS_SPEED_TOKEN 读取，仍为空表示不校验")
+		maxGB    = flag.Float64("max-gb", 50, "单请求最大字节数（GB）")
 		rateFlag = flag.Float64("rate", 0, "每条连接的发送限速（MB/s），0 表示不限；用于模拟受限链路")
 	)
 	flag.Parse()
 
-	listenAdr = *addr
 	token = *tok
 	if token == "" {
 		token = os.Getenv("FNS_SPEED_TOKEN")
@@ -64,13 +61,13 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:              listenAdr,
+		Addr:              *addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		WriteTimeout:      0, // 大流量不限写超时
 		IdleTimeout:       60 * time.Second,
 	}
-	log.Printf("fnspeed-sink 监听 %s，单请求上限 %.1f GB", listenAdr, float64(maxBytes)/(1<<30))
+	log.Printf("fnspeed-sink 监听 %s，单请求上限 %.1f GB", *addr, float64(maxBytes)/(1<<30))
 	log.Fatal(srv.ListenAndServe())
 }
 
@@ -216,24 +213,12 @@ func handleUp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "只接受 POST/PUT", http.StatusMethodNotAllowed)
 		return
 	}
-	// 读多少丢多少，不落盘、不缓冲
-	n, err := io.Copy(io.Discard, r.Body)
+	// 读多少丢多少，不落盘、不缓冲。
+	// 客户端在压测结束时主动断开是正常现象：io.Copy 会返回错误，
+	// 但那时的字节数就是有效结果，不需要区分错误类型。
+	n, _ := io.Copy(io.Discard, r.Body)
 	r.Body.Close()
-	if err != nil {
-		var ne net.Error
-		if ok := asNetErr(err, &ne); ok {
-			// 客户端主动断开，属于压测正常结束
-		}
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"received":%d}`, n)
-}
-
-func asNetErr(err error, target *net.Error) bool {
-	if ne, ok := err.(net.Error); ok {
-		*target = ne
-		return true
-	}
-	return false
 }
