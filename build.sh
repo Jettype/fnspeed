@@ -6,7 +6,7 @@
 set -euo pipefail
 
 APP="fnspeed"
-VER="1.5.9"
+VER="1.6.0"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SRC="$ROOT/src"
 SINK="$ROOT/sink"
@@ -39,8 +39,12 @@ build_pkg() {
   mkdir -p "$stage/target"
 
   echo "==> 编译 $arch"
+  # -X 把版本号注入二进制：运行时用它做云端清单的 minAppVersion 比对，
+  # 也省得界面上再维护第三份版本号。
   ( cd "$SRC" && GOOS=linux GOARCH=$arch CGO_ENABLED=0 \
-      go build -trimpath -ldflags="-s -w" -o "$stage/target/fnspeed" . )
+      go build -trimpath \
+        -ldflags="-s -w -X main.appVersion=$VER" \
+        -o "$stage/target/fnspeed" . )
 
   # ★ 关键：桌面入口必须落在 target/ui/ 下
   #   官方文档 app-entry 明确 desktop_uidir 是「相对于应用目录」的 UI 目录，
