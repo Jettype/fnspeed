@@ -6,6 +6,47 @@
 设计与实现细节见 [docs/DESIGN.md](docs/DESIGN.md)。云配置的接口与数据格式见
 [docs/CLOUD.md](docs/CLOUD.md)。
 
+## 未发布 — 仓库整理
+
+不改测量逻辑，也不改界面。这一轮只清掉长期堆下来的冗余与不一致。
+
+**删：历史记录链路**
+
+`/api/history` 从上线起就没有前端入口，但每次测速结束都在 `var/history.jsonl` 追加一条
+（时间、并发、峰值 / 稳定 / 平均速率、丢包、抖动、结论）。写了几十万行没人读，
+既是无用 IO，也是多余的隐私写入面。整条链路移除：路由、handler、`AppendHistory`、
+`HistoryRec`、`trimHistory` 与 3 个对应单测。`Engine.Wait()` 因此不再需要 `dataDir` 参数。
+
+老版本留下的 `var/history.jsonl` 不会被自动删除，可以手动清理。
+
+**删：冗余文件**
+
+- `tools/123pan.py`（305 行）：123 云盘托管方案的工具，实际走的是 GitHub raw。
+  它的维护成本随清单格式变化而增长，且示例里的 fileID 是真实值
+- `ui/icon.png`：与 `ICON_256.PNG` 字节相同的副本，`build.sh` 从不复制、包里也没有，
+  但每次构建都会重新生成，把工作树弄脏
+- `screenshots/narrow-500.png`：全仓零引用
+- `PLAN-1.5.1.md` 移到 `docs/history/`：已完工的历史计划，挪走而不是删掉
+
+**改：文档准确性**
+
+- `presets.go` 头部注释还写着「高校镜像站的整镜像 ISO」，与同文件「高校镜像站全线 403」
+  自相矛盾，已改成实际的选源原则
+- README 的「15 个内置测速源」改为「15 组内置预设」（`docs/SUBMIT.md` 自己就警告过
+  这个数字口径会被审核挑）
+- `docs/CLOUD.md` 降级链示例里的配置集数量从 15 改为 34（与线上清单一致），
+  但 `builtin` 那一层保持 15（出厂预设确实是 15 组）
+- `manifest` 的 `desc` 补上 Vultr / DataPacket，原文只提腾讯、阿里、苹果，覆盖不到
+  现有的纯测速站点
+- `CONTRIBUTING.md` 的发版步骤去掉了已不存在的「README 顶部章节」，并把
+  `git push --tags` 改成「先推 main、等 CI 绿、再单独推 tag」
+
+**补：**
+
+- `SECURITY.md`：攻击面、不在范围内的情形、漏洞报告方式
+- `ci.yml` 加 `permissions: contents: read` 与 `concurrency`（同 ref 连续推送取消上一轮），
+  并把「校验 manifest 版本号」从「非空即过」改成真的与 `build.sh` 的 `VER` 比对
+
 ## 1.6.0 — 2026-11-15
 
 本版原以 `1.6.0-alpha` 作内部验证版，验证通过后直接转正，未另起 1.6.1 —— 相对 1.5.9

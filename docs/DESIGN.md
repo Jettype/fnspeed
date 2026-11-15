@@ -140,8 +140,8 @@
 **运行中的采集不产生任何额外请求**：连接建立时 `httptrace.GotConn` 顺手记下对端地址。
 空闲时才调 `POST /api/hits` 批量探测（4 并发 / 单条 5s / 结果缓存 10 分钟）。
 
-**隐私（硬约束）**：IP **只在内存里存在** —— 不写 `history.jsonl`、不写 `app.log`、
-不进 `user.json`、不进 `crash.log`。`ipinfo.go` 里没有任何打印 IP 的代码。
+**隐私（硬约束）**：IP **只在内存里存在** —— 不写任何磁盘文件（日志、`crash.log`、
+配置都不例外）。`ipinfo.go` 里没有任何打印 IP 的代码。
 
 卡片右上角有「显示 IP」开关。关掉后服务端**一个外部请求都不发**，直接返回 `{"hidden":true}`，
 界面只显示「已隐藏」，不渲染任何 IP 字符。状态存 `etc/settings.json` 的 `showIp`，重启保留。

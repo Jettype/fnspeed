@@ -2,6 +2,9 @@
 
 程序从远端拉这份 JSON，用它取代编译进二进制的出厂清单。
 
+> 本文只讲**怎么维护这份清单**：托管在哪、实测数据、改完怎么发。
+> 接口形状、数据格式、签名原文、降级链、排障一律见 [docs/CLOUD.md](../docs/CLOUD.md)。
+
 **当前托管**：主仓库的 `cloud/sources.json`，线上地址
 
 ```
@@ -142,29 +145,3 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 - `up-sink` 那条是 `127.0.0.1:8977`，只在 NAS 本机能用，要测得改成局域网 IP
 - 并发与时长不写在清单里：它们由界面上的「全局参数」控制，写在这里也不生效
 
-## 用自己的 123 云盘文件做源
-
-比用腾讯/阿里的公开安装包更站得住脚 —— 那是你自己的文件，符合「自有或已获授权」。
-
-前提：账号开通「开发者权益包」，并在开放平台创建应用拿到 clientID / clientSecret。
-
-```bash
-# 凭据放 etc/123pan.json（.gitignore 已覆盖），或走环境变量 PAN123_CLIENT_ID / _SECRET
-./tools/123pan.py token --client-id ... --client-secret ...
-
-./tools/123pan.py link 10861131                    # 只看直链
-./tools/123pan.py profile 10861131 --id pan123-big # 只看会生成什么条目
-./tools/123pan.py add 10861131 --id pan123-big --name "123云盘 · 自有大文件"
-```
-
-`add` 会自动取直链、写进 `profiles`、把 `rev` 推到下一个序号。清单原来有签名的话
-它会提醒你重跑 `./tools/sign_cloud.py` —— 内容变了旧签名必然失效，不重签客户端会整份拒绝。
-
-没有权益包也能做：在网页版上传文件，用会员的「直链提取」拿到地址，手工粘进 `downloadUrls` 即可。
-
-**把清单本身托管在 123 云盘**也走同一条路（上传 `sources.json` → 取直链 → 填到侧栏「云端源」），
-但每次改都要重新上传，fileID 变了直链就跟着变，你还得改一次 endpoint。
-适合一次性分发，不适合长期托管。
-
-**压测注意**：直链走 123 自己的 CDN，几十条并发长连接对一个网盘账号来说很像异常流量。
-先用 4–8 并发试，盯一下有没有 403 / 429，别一上来就 64。

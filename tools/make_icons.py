@@ -65,9 +65,7 @@ def make(size: int) -> Image.Image:
 def main():
     make(64).save(os.path.join(ROOT, "ICON.PNG"), "PNG")
     make(256).save(os.path.join(ROOT, "ICON_256.PNG"), "PNG")
-    os.makedirs(os.path.join(ROOT, "ui"), exist_ok=True)
-    make(256).save(os.path.join(ROOT, "ui", "icon.png"), "PNG")
-    print("    已生成 ICON.PNG(64) / ICON_256.PNG(256) / ui/icon.png")
+    print("    已生成 ICON.PNG(64) / ICON_256.PNG(256)")
 
 
 if __name__ == "__main__":

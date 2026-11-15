@@ -8,6 +8,15 @@ on:
     tags: ['v*']
   pull_request:
 
+# 只读仓库内容：这个 workflow 不写任何东西，没必要给它更大的 token 权限
+permissions:
+  contents: read
+
+# 同一个 ref 连续推送时取消上一轮 —— CI 看的是最新提交，跑旧的没有意义
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: vet + test (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -109,13 +118,21 @@ jobs:
             fi
           done
 
-      - name: 校验 manifest 版本号已被 build.sh 覆盖
+      - name: 校验 manifest 的 version 与 build.sh 的 VER 一致
         run: |
           set -e
+          VER=$(sed -nE 's/^VER="?([^"]+)"?$/\1/p' build.sh | head -1)
+          if [ -z "$VER" ]; then
+            echo "::error::没能从 build.sh 里读出 VER"
+            exit 1
+          fi
           for f in dist/*.fpk; do
             v=$(tar xzOf "$f" manifest | sed -n 's/^version *= *//p')
-            echo "$f -> version=$v"
-            test -n "$v"
+            echo "$f -> version=$v（期望 $VER）"
+            if [ "$v" != "$VER" ]; then
+              echo "::error::$f 的 version=$v，与 build.sh 的 VER=$VER 不一致"
+              exit 1
+            fi
           done
 
       - uses: actions/upload-artifact@v4

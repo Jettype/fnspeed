@@ -4,10 +4,6 @@ package main
 // 热路径只做 atomic.Add，不碰锁；前端 500ms 拉一次快照。
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -447,74 +443,4 @@ func (s *Stats) Snapshot(seriesLimit int, stopReason string, urls []URLOut) Snap
 	snap.AvgRecv = clampToPeak(snap.AvgRecv, snap.PeakRecv)
 	snap.AvgSent = clampToPeak(snap.AvgSent, snap.PeakSent)
 	return snap
-}
-
-type HistoryRec struct {
-	At          int64   `json:"at"`
-	DurationSec int     `json:"durationSec"`
-	Concurrency int     `json:"concurrency"`
-	RecvTotal   int64   `json:"recvTotal"`
-	SentTotal   int64   `json:"sentTotal"`
-	PeakRecv    int64   `json:"peakRecv"`
-	PeakSent    int64   `json:"peakSent"`
-	SteadyRecv  int64   `json:"steadyRecv"`
-	SteadySent  int64   `json:"steadySent"`
-	AvgRecv     int64   `json:"avgRecv"`
-	AvgSent     int64   `json:"avgSent"`
-	Failures    int64   `json:"failures"`
-	StopReason  string  `json:"stopReason"`
-	Jitter      float64 `json:"jitter"`
-	Loss        float64 `json:"loss"`
-	Verdict     string  `json:"verdict"`
-}
-
-// 历史文件的两个上限：超过 historyMaxBytes 就只保留最后 historyKeep 行。
-// 这是 NAS 上的长驻程序，一天跑十几轮、一年攒出几十 MB 也没人清理；
-// /api/history 又是整文件读进来再截断的，必须有个天花板。
-const (
-	historyMaxBytes = 1 << 20
-	historyKeep     = 200
-)
-
-func AppendHistory(dataDir string, rec HistoryRec) error {
-	if dataDir == "" {
-		return nil
-	}
-	path := filepath.Join(dataDir, "history.jsonl")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return err
-	}
-	b, err := json.Marshal(rec)
-	if err != nil {
-		_ = f.Close()
-		return err
-	}
-	b = append(b, '\n')
-	_, err = f.Write(b)
-	fi, statErr := f.Stat()
-	_ = f.Close()
-	if err != nil {
-		return err
-	}
-	if statErr == nil && fi.Size() > historyMaxBytes {
-		_ = trimHistory(path, historyKeep)
-	}
-	return nil
-}
-
-// trimHistory 只留最后 keep 行。失败不报错 —— 历史记录不是关键路径，
-// 写不进去也不该影响本次测速的结果。
-func trimHistory(path string, keep int) error {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
-	if len(lines) <= keep {
-		return nil
-	}
-	lines = lines[len(lines)-keep:]
-	out := strings.Join(lines, "\n") + "\n"
-	return os.WriteFile(path, []byte(out), 0644)
 }

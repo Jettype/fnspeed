@@ -697,8 +697,8 @@ func (e *Engine) StopReason() string {
 	return e.reason
 }
 
-// Wait 等所有 worker 退出，然后写历史。
-func (e *Engine) Wait(dataDir string) {
+// Wait 等所有 worker 退出，并定格本次统计。
+func (e *Engine) Wait() {
 	e.wg.Wait()
 	// 所有 worker 已退出。若引擎是「自然结束」（wg 归零但 ctx 还活着），必须在这里
 	// 关掉 ctx：scheduler 与 watchStall / watchLimits 都不在 wg 里，它们会继续跑到
@@ -722,24 +722,6 @@ func (e *Engine) Wait(dataDir string) {
 	e.res.Stop()
 
 	e.stats.Finalize(int(e.peakStreams.Load()))
-	snap := e.stats.Snapshot(0, e.StopReason(), e.urlOuts())
-	if e.prober != nil {
-		snap.Ping = e.prober.Snapshot()
-	}
-	snap.Res = e.res.Snapshot()
-	snap.Concurrency = int(e.peakStreams.Load())
-	snap.Verdict = Judge(snap)
-
-	_ = AppendHistory(dataDir, HistoryRec{
-		At: time.Now().Unix(), DurationSec: e.profile.DurationSec, Concurrency: int(e.peakStreams.Load()),
-		RecvTotal: snap.RecvTotal, SentTotal: snap.SentTotal,
-		PeakRecv: snap.PeakRecv, PeakSent: snap.PeakSent,
-		SteadyRecv: snap.SteadyRecv, SteadySent: snap.SteadySent,
-		AvgRecv: snap.AvgRecv, AvgSent: snap.AvgSent,
-		Failures: snap.Failures, StopReason: snap.StopReason,
-		Jitter: snap.Ping.Target.Jitter, Loss: snap.Ping.Target.Loss,
-		Verdict: snap.Verdict.Text,
-	})
 }
 
 func (e *Engine) URLStates() []URLOut { return e.urlOuts() }

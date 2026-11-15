@@ -9,8 +9,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,7 +38,6 @@ type App struct {
 	stats      *Stats
 	cfg        *Config
 	store      *Store
-	dataDir    string
 	settings   *SettingsStore
 	cloud      *CloudManager
 	note       string
@@ -50,8 +47,8 @@ type App struct {
 	lastRes    ResStat
 }
 
-func NewApp(dataDir string, store *Store, settings *SettingsStore, cloud *CloudManager) *App {
-	return &App{stats: NewStats(), dataDir: dataDir, store: store, settings: settings, cloud: cloud}
+func NewApp(store *Store, settings *SettingsStore, cloud *CloudManager) *App {
+	return &App{stats: NewStats(), store: store, settings: settings, cloud: cloud}
 }
 
 // onCloudChange 是云配置层「默认区变了」的回调。
@@ -125,7 +122,6 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/selftest", a.handleSelfTest)
 	mux.HandleFunc("/api/ipinfo", a.handleIPInfo)
 	mux.HandleFunc("/api/hits", a.handleHits)
-	mux.HandleFunc("/api/history", a.handleHistory)
 	mux.HandleFunc("/api/cloud", a.handleCloud)
 	mux.HandleFunc("/api/cloud/refresh", a.handleCloudRefresh)
 }
@@ -394,7 +390,7 @@ func (a *App) handleStart(w http.ResponseWriter, r *http.Request) {
 				a.stats.Tick()
 			}
 		}()
-		eng.Wait(a.dataDir)
+		eng.Wait()
 		tick.Stop()
 
 		a.mu.Lock()
@@ -683,35 +679,6 @@ func (a *App) handleExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="fnspeed-config-`+name+`.json"`)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(b)
-}
-
-func (a *App) handleHistory(w http.ResponseWriter, r *http.Request) {
-	path := filepath.Join(a.dataDir, "history.jsonl")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"items": []any{}})
-		return
-	}
-	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-	items := make([]json.RawMessage, 0, len(lines))
-	for _, ln := range lines {
-		ln = strings.TrimSpace(ln)
-		// 半行(上次写入被断电/磁盘满截断)直接跳过：json.RawMessage 会把字节原样
-		// 塞进响应，一行坏数据就能让整个 /api/history 变成非法 JSON。
-		if ln == "" || !json.Valid([]byte(ln)) {
-			continue
-		}
-		items = append(items, json.RawMessage(ln))
-	}
-	if len(items) > 50 {
-		items = items[len(items)-50:]
-	}
-	// 最新的在最前面。原先用 sort.SliceStable 配 `i > j` 当 less（比较的是下标
-	// 而不是元素），排序结果依赖实现细节，等于把顺序交给运气；这里直接反转。
-	for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
-		items[i], items[j] = items[j], items[i]
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 // readAllLimited 读请求体并限制体积。

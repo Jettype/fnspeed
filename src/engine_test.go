@@ -189,7 +189,7 @@ func TestWaitClosesEngine(t *testing.T) {
 	}
 
 	e.Stop("测试结束")
-	e.Wait("") // dataDir 为空 → 不写历史
+	e.Wait()
 
 	if e.ctx.Err() == nil {
 		t.Fatal("Wait 返回后 ctx 必须已关闭，否则看门狗与调度器会继续活着")

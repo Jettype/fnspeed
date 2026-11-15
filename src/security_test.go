@@ -4,8 +4,6 @@ package main
 // 这些函数不起网络、不碰平台 syscall，改动它们时先看这里是不是会红。
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -97,33 +95,5 @@ func TestTickNeverReportsNegativeRate(t *testing.T) {
 	}
 	if rs := s.lastRS.Load(); rs < 0 {
 		t.Fatalf("上行瞬时速率不应为负，实际 %d", rs)
-	}
-}
-
-func TestTrimHistory(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "history.jsonl")
-	var b strings.Builder
-	for i := 0; i < 50; i++ {
-		b.WriteString(`{"at":`)
-		b.WriteString(itoa(i))
-		b.WriteString("}\n")
-	}
-	if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := trimHistory(path, 10); err != nil {
-		t.Fatalf("trimHistory 失败: %v", err)
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
-	if len(lines) != 10 {
-		t.Fatalf("应保留 10 行，实际 %d", len(lines))
-	}
-	if lines[0] != `{"at":40}` {
-		t.Fatalf("应保留最后 10 行，首行是 %q", lines[0])
 	}
 }

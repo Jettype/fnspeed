@@ -99,11 +99,16 @@ GOOS=linux GOARCH=amd64 go test -c -o /tmp/fnspeed.test .   # 只能编出来，
 打 tag 即发版，CI 自动打包并挂到 Release 上（`.github/workflows/release.yml`）：
 
 ```bash
-# 1. 改 build.sh 的 VER、manifest 的 version、README 顶部章节
-# 2. 提交后打 tag（必须带 v 前缀，且号码与 VER 完全一致）
-git tag -a v1.5.5 -m "fnspeed 1.5.5"
-git push origin main --tags
+# 1. 改 build.sh 的 VER 与 manifest 的 version（两处必须一致），CHANGELOG 顶部加一节
+# 2. 先推 main，等 CI 跑绿
+git push origin main
+# 3. 再单独打 tag 推上去
+git tag -a v1.6.0 -m "fnspeed 1.6.0"
+git push origin v1.6.0
 ```
+
+**不要把 tag 和 main 同批推**（`git push --tags`）：改动过 `release.yml` 的那次提交，
+GitHub 处理 tag 事件时 workflow 还没索引完，打包不会触发。分开推永远是对的。
 
 tag 与 `build.sh` 的 `VER` 不一致时流程会直接失败，不会产出名字和内容对不上的包。
 workflow 还会独立复核：manifest 的 version/platform、manifest 声明的 checksum 是否

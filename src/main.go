@@ -24,7 +24,7 @@ func main() {
 	var (
 		port     = flag.Int("port", 8976, "HTTP 监听端口（UI + API，仅绑定回环地址）")
 		sock     = flag.String("sock", "", "Unix Socket 路径（fnOS 统一网关入口，留空则只开 TCP）")
-		dataDir  = flag.String("data-dir", "", "可写数据目录 var/（历史记录）")
+		dataDir  = flag.String("data-dir", "", "可写数据目录 var/（crash.log 与 etc/ 的上级目录）")
 		etcDir   = flag.String("etc-dir", "", "配置目录 etc/（builtin.json / user.json 落盘位置）")
 		basePath = flag.String("base-path", "/app/fnspeed", "fnOS 网关挂载前缀")
 		prof     = flag.Bool("pprof", false, "开放 /debug/pprof/ 性能剖析入口（排障用，仅本机回环可访问）")
@@ -75,7 +75,7 @@ func main() {
 		}
 	}
 
-	app := NewApp(*dataDir, store, settings, cloud)
+	app := NewApp(store, settings, cloud)
 	cloud.SetOnChange(app.onCloudChange)
 
 	log.Printf("全局参数：并发 %d / 时长 %ds（etc/settings.json）", settings.Get().Concurrency, settings.Get().DurationSec)

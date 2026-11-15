@@ -11,10 +11,7 @@ package main
 //     Tick 后面触发，现场差分 dt≈0、商恒等于 0。
 
 import (
-	"encoding/json"
 	"math"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -245,62 +242,6 @@ func TestSnapshotAvgSkipsSlowStart(t *testing.T) {
 	if got < 90_000 || got > 110_000 {
 		t.Fatalf("平均值 %d，期望约 100000（1MB / 10s）", got)
 	}
-}
-
-// ---------------- 历史记录 ----------------
-
-func TestAppendHistoryWritesOneJSONLine(t *testing.T) {
-	dir := t.TempDir()
-	rec := HistoryRec{At: 123, DurationSec: 30, Concurrency: 8, RecvTotal: 999}
-
-	if err := AppendHistory(dir, rec); err != nil {
-		t.Fatalf("写入失败: %v", err)
-	}
-	if err := AppendHistory(dir, rec); err != nil {
-		t.Fatalf("追加失败: %v", err)
-	}
-
-	b, err := os.ReadFile(filepath.Join(dir, "history.jsonl"))
-	if err != nil {
-		t.Fatalf("读回失败: %v", err)
-	}
-	lines := 0
-	for _, ln := range splitLines(b) {
-		var got HistoryRec
-		if err := json.Unmarshal([]byte(ln), &got); err != nil {
-			t.Fatalf("第 %d 行不是合法 JSON: %v", lines+1, err)
-		}
-		if got.RecvTotal != 999 || got.DurationSec != 30 {
-			t.Errorf("字段丢了吗：%+v", got)
-		}
-		lines++
-	}
-	if lines != 2 {
-		t.Fatalf("应有 2 行，实际 %d（必须是追加而不是覆盖）", lines)
-	}
-}
-
-func TestAppendHistoryEmptyDirIsNoop(t *testing.T) {
-	if err := AppendHistory("", HistoryRec{}); err != nil {
-		t.Fatalf("空 dataDir 应直接返回 nil，实际 %v", err)
-	}
-}
-
-func splitLines(b []byte) []string {
-	var out []string
-	start := 0
-	for i, c := range b {
-		if c == '\n' {
-			if i > start {
-				out = append(out, string(b[start:i]))
-			}
-			start = i + 1
-		}
-	}
-	if start < len(b) {
-		out = append(out, string(b[start:]))
-	}
-	return out
 }
 
 // ---------------- 结束后的定格 ----------------

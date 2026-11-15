@@ -50,8 +50,13 @@ fnspeed/
 │   ├── tune.go                 # 内核参数调优
 │   └── web/index.html          # 前端（编译期 embed）
 ├── sink/                       # 配套接收端（含 -rate 限速，可模拟受限链路）
-├── tools/make_icons.py
-└── screenshots/
+├── cloud/                      # 云端清单 sources.json + 维护说明
+├── tools/
+│   ├── make_icons.py           # 构建期生成图标
+│   ├── sign_cloud.py           # 给云端清单算 HMAC 签名
+│   └── check_privacy.sh        # 发布前隐私自检（CI 也跑这一条）
+├── docs/history/               # 已完工的历史计划
+└── screenshots/                # README 用的界面截图
 ```
 
 ## 2. 配置持久化
