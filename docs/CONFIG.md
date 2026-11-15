@@ -42,7 +42,8 @@ fnspeed/
 │   ├── analysis.go             # 结论判定（本机/链路/目标端）
 │   ├── stats.go                # 原子计数 + 环形缓冲 + 稳定值
 │   ├── config.go               # v2 配置解析/导出
-│   ├── presets.go              # 内置国内/国外/上传测速源
+│   ├── presets.go              # 出厂测速源（1.6.0 起只在降级时生效）
+│   ├── cloud.go                # 云配置：远端拉取 / 校验 / 降级 / 快照
 │   ├── selftest.go             # 分层网络自检（DNS→TCP→TLS→HTTP）
 │   ├── store.go                # etc/ 下配置原子写 + .bak
 │   ├── api.go                  # HTTP API + SSE
@@ -58,14 +59,18 @@ fnspeed/
 | 项 | 规则 |
 |---|---|
 | 唯一写入位置 | `etc/`（`$TRIM_PKGETC`）与 `var/`；**绝不写 `target/`** |
-| 默认区 | `etc/builtin.json`：程序所有，每次启动按内容 hash 比对，不同就**整体覆盖** |
+| 默认区（出厂） | `etc/builtin.json`：程序所有，每次启动按内容 hash 比对，不同就**整体覆盖** |
+| 默认区（云端） | `etc/cloud.json`：远端清单快照，带 ETag 与拉取时间。云端可用时由它接管默认区，详见 [CLOUD.md](CLOUD.md) |
 | 用户区 | `etc/user.json`：**永不触碰**，只存增量（自建的、改过的、隐藏的） |
 | 原子写 | 临时文件 → `fsync` → `chmod` → `rename` |
 | 备份 | 每次替换前把旧文件写成 `.bak` |
 | 损坏恢复 | 启动时主文件解析失败 → 回退 `.bak`，界面顶部提示来源 |
 | 前端 | **不用 localStorage**（App 内 webview 会清）；保存一律 `POST /api/profiles` 落盘后**回读**，不做本地乐观更新 |
 
-拆双文件的原因：旧版把所有配置集塞在一个 `profiles.json` 里，升级时只能「按 ID 补齐」，
+云端接管期间 `builtin.json` 不会被改写 —— 它必须一直是出厂清单，否则云端永久不可用时
+用户点「恢复默认」也退不回去。
+
+拆成多份文件的原因：旧版把所有配置集塞在一个 `profiles.json` 里，升级时只能「按 ID 补齐」，
 从不删除 —— 删掉的内置分组会在恢复默认后原样复活。现在默认区靠整体替换文件清理，
 用户区只存增量，结构上不可能残留垃圾。
 

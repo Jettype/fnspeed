@@ -519,6 +519,13 @@ body.show-mbar .mbar{opacity:1;visibility:visible;transform:none}
       <select id="profile"><option value="">（加载中）</option></select>
       <div class="hint" id="storeHint"></div>
 
+      <label class="lbl">云端源</label>
+      <input type="text" id="cloudUrl" placeholder="留空使用内置地址" spellcheck="false" autocomplete="off">
+      <div class="acts2">
+        <button class="btn xs" id="btnCloud">立即刷新</button>
+      </div>
+      <div class="hint" id="cloudHint">正在读取云端配置…</div>
+
       <label class="lbl">下载 URL</label>
       <textarea id="dl" rows="4" placeholder="每行一条，建议 3 条以上不同 CDN"></textarea>
 
@@ -596,6 +603,8 @@ const API = {
   hits:    "api/hits",
   regions: "api/regions",
   presets: "api/presets/restore",
+  cloud:   "api/cloud",
+  cloudRefresh:"api/cloud/refresh",
   exportStd:"api/config/export?mode=standard"
 };
 
@@ -1338,15 +1347,97 @@ $("btnProbe").addEventListener("click", async ()=>{
   }catch(e){ $("probeHint").textContent=e.message; }
 });
 
+/* ---------------- 云配置 ----------------
+   源的权威来源在云端，本地只剩降级用的快照。界面上必须能一眼看出
+   「现在用的是哪一级」—— 降级可以发生，但不能静默发生。 */
+function cloudAge(sec){
+  if(sec===undefined || sec===null || sec<0) return "";
+  if(sec<60) return "刚刚";
+  if(sec<3600) return Math.floor(sec/60)+" 分钟前";
+  if(sec<86400) return Math.floor(sec/3600)+" 小时前";
+  return Math.floor(sec/86400)+" 天前";
+}
+function renderCloud(c){
+  const el=$("cloudHint"); if(!el || !c) return;
+  let txt="", warn=false;
+  if(c.state==="live"){
+    txt="云端 · "+(c.rev||"—")+" · "+cloudAge(c.ageSec)+" · "+c.profileCount+" 个配置集";
+    if(c.signed) txt+=" · 已验签";
+  }else if(c.state==="cache"){
+    txt="缓存快照 · "+(c.rev||"—")+" · "+cloudAge(c.ageSec)+" · "+c.profileCount+" 个配置集";
+    warn=true;
+  }else if(c.state==="off"){
+    txt="远端拉取已关闭，使用本地清单";
+  }else{
+    txt="出厂兜底 · "+c.profileCount+" 个配置集（尚未取到云端清单）";
+    warn=true;
+  }
+  if(c.lastError) txt+="；上次刷新失败："+c.lastError;
+  el.textContent=txt;
+  el.className="hint"+(warn?" warn":"");
+}
+async function loadCloud(){
+  try{
+    const j=await fetch(API.cloud).then(r=>r.json());
+    renderCloud(j.cloud);
+  }catch(e){ /* 接口挂了不影响压测 */ }
+}
+if($("btnCloud")){
+  $("btnCloud").addEventListener("click", async ()=>{
+    const b=$("btnCloud"), old=b.textContent;
+    b.disabled=true; b.textContent="刷新中…";
+    try{
+      const r=await post(API.cloudRefresh,{});
+      if(r.config) applyConfig(r.config);
+      renderCloud(r.cloud);
+      flash(r.error? ("云端刷新失败："+r.error) : (r.changed? "云端源已更新":"已是最新，无需更新"), !!r.error);
+    }catch(e){
+      flash("云端刷新失败："+e.message, true);
+    }finally{
+      b.disabled=false; b.textContent=old;
+    }
+  });
+}
+if($("cloudUrl")){
+  $("cloudUrl").addEventListener("change", ()=>{
+    GS.cloudEndpoint=$("cloudUrl").value.trim();
+    GS.cloudDisabled=false;
+    autosaveSettings(0);
+    // 换地址后后台会立刻重拉一次，稍等再回读状态
+    setTimeout(loadCloud, 2500);
+  });
+}
+
 /* ---------------- 配置集 ---------------- */
 let allProfiles = [];
+
+// 并发上限不足时，多出来的源根本不会被分配到流。
+//
+// 引擎的一条流只挂一个源，起始只开 4 条（受并发上限约束），
+// 之后爬坡再加。所以「并发 1 + 10 条源」的结果是只有第一条源有流量、
+// 其余全是 0 B —— 界面上看不出任何异常（源是好的、也没有报错），
+// 用户只会觉得「只能拉到第一个源」。这句话就是把这件事说出来。
+function multiSourceNote(){
+  const conc=Number($("conc").value||0);
+  const dl=$("dl").value.split("\n").map(s=>s.trim()).filter(Boolean).length;
+  if(!conc || dl<=1 || conc>=dl) return "";
+  return `并发上限 ${conc} 小于本配置集的 ${dl} 条源：只会用到前 ${conc} 条，其余不会建立连接。`;
+}
+
+let hintDesc="";
+function updateStoreHint(){
+  const note=multiSourceNote();
+  $("storeHint").textContent=[hintDesc, note].filter(Boolean).join("  ");
+  $("storeHint").className="hint"+(note?" warn":"");
+}
 
 function fillProfileForm(p){
   if(!p) return;
   $("dl").value=(p.downloadEndpoints||[]).map(e=>e.url).join("\n") || (p.downloadUrls||[]).join("\n");
   $("ul").value=(p.uploadEndpoints||[]).map(e=>e.url).join("\n") || (p.uploadUrls||[]).join("\n");
   if(p.mode) setMode(p.mode);
-  $("storeHint").textContent = p.desc || "";
+  hintDesc = p.desc || "";
+  updateStoreHint();
 }
 
 function fillSelects(cfg){
@@ -1435,7 +1526,9 @@ async function saveSettings(){
       bytesLimit:Math.round(Number($("limit").value||0)*1073741824),
       showIp:!!GS.showIp,
       showHit:!!GS.showHit,
-      region:$("region")? $("region").value : ""
+      region:$("region")? $("region").value : "",
+      cloudEndpoint:($("cloudUrl") && $("cloudUrl").value.trim()) || GS.cloudEndpoint || "",
+      cloudDisabled:!!GS.cloudDisabled
     });
     if(r && r.settings){
       GS=r.settings;
@@ -1588,6 +1681,10 @@ $("fileInput").addEventListener("change", async e=>{
 
 $("btnExportStd").addEventListener("click", ()=>{ location.href=API.exportStd; });
 
+// 并发或源列表改动后提示要跟着变。只改提示文字，不重填表单 ——
+// 这里若调 fillProfileForm 会把用户没保存的编辑内容冲掉。
+["conc","dl"].forEach(id=>{ if($(id)) $(id).addEventListener("input", updateStoreHint); });
+
 /* 启动：从服务端拉一次。App 内 webview 会清 localStorage，所以不缓存本地状态 */
 fetch(API.profiles).then(r=>r.json()).then(j=>{
   if(j.settings){
@@ -1602,6 +1699,8 @@ fetch(API.profiles).then(r=>r.json()).then(j=>{
     $("heroTotal").textContent=fmt.dur(GS.durationSec);
   }
   applyConfig(j.config||{});
+  if(j.cloud) renderCloud(j.cloud);
+  if($("cloudUrl") && j.settings) $("cloudUrl").value=j.settings.cloudEndpoint||"";
   if(j.note) flash(j.note, true);
   if(GS.showIp) setTimeout(loadIPInfo, 600);
   else $("ipBody").innerHTML=IP_HIDDEN;

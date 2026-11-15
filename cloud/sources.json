@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-10.1",
+  "rev": "2026-11-15.1",
   "ttlSec": 21600,
-  "issuedAt": 1794311956,
+  "issuedAt": 1794755326,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "内部测试源，2026-11 实测（新增库洛鸣潮 / 完美世界 / 网易逆水寒；微软剔除两条慢源）",
+  "notice": "公共测速源，2026-11 实测（含库洛鸣潮 / 完美世界 / 网易逆水寒等游戏客户端分发）",
   "profiles": [
     {
       "id": "cn-tencent",

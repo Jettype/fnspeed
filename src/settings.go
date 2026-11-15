@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -36,6 +37,13 @@ type GlobalSettings struct {
 	// Region 是定向测速位置，空串或 auto 表示就近（跟随本机 DNS 调度）。
 	// 非空时用 ECS 让 CDN 返回该省该运营商的节点，再强制拨号过去。
 	Region string `json:"region,omitempty"`
+
+	// CloudEndpoint 是云配置清单地址。留空用编译期默认值。
+	// 放在 settings 而不是配置文件里，是为了换地址不必改动 builtin/user 两份清单。
+	CloudEndpoint string `json:"cloudEndpoint,omitempty"`
+	// CloudDisabled 彻底关闭远端拉取，只用本地缓存与出厂清单。
+	// 排查「云端下发了一份坏数据」时用得上。
+	CloudDisabled bool `json:"cloudDisabled,omitempty"`
 }
 
 type SettingsStore struct {
@@ -143,5 +151,9 @@ func normalizeSettings(g *GlobalSettings) {
 		if _, ok := regionIndex[g.Region]; !ok {
 			g.Region = ""
 		}
+	}
+	g.CloudEndpoint = strings.TrimSpace(g.CloudEndpoint)
+	if len(g.CloudEndpoint) > 512 {
+		g.CloudEndpoint = ""
 	}
 }

@@ -72,6 +72,7 @@ bash build.sh
 | [docs/INSTALL.md](docs/INSTALL.md) | 安装、桌面入口与网关反代、图标排查、接收端部署、构建与验收 |
 | [docs/SUBMIT.md](docs/SUBMIT.md) | 提交飞牛应用中心：七条硬规则自查、表单字段口径、一次性材料 |
 | [docs/CONFIG.md](docs/CONFIG.md) | 文件树、配置持久化与格式、15 个内置测速源 |
+| [docs/CLOUD.md](docs/CLOUD.md) | 云配置：远端源清单的接口、数据格式、签名与降级链（1.6.0 起） |
 | [docs/DESIGN.md](docs/DESIGN.md) | 调度策略、定向测速、传输模式、稳定性、已知限制、安全边界 |
 | [CHANGELOG.md](CHANGELOG.md) | 各版本改了什么、为什么改（含已缺失的 1.5.2） |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 硬约束、新增测速源门槛、测试守着哪些不变量 |

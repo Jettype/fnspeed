@@ -849,14 +849,17 @@ func (e *Engine) watchLimits() {
 		case <-e.ctx.Done():
 			return
 		case <-t.C:
+			// 把实际生效的数值写进停止原因。
+			// 「到达时长上限」四个字看不出到底是多少秒，用户很容易把它当成
+			// 「下载一会儿就自己暂停了」的故障 —— 尤其是把时长填成 10 秒试跑的时候。
 			if e.profile.DurationSec > 0 && time.Since(e.stats.StartAt()).Seconds() >= float64(e.profile.DurationSec) {
-				e.Stop("到达时长上限")
+				e.Stop(fmt.Sprintf("到达时长上限（%d 秒）", e.profile.DurationSec))
 				return
 			}
 			if e.profile.BytesLimit > 0 {
 				total := e.stats.RecvBytes.Load() + e.stats.SentBytes.Load()
 				if total >= e.profile.BytesLimit {
-					e.Stop("到达流量上限")
+					e.Stop(fmt.Sprintf("到达流量上限（%.1f GB）", float64(e.profile.BytesLimit)/(1<<30)))
 					return
 				}
 			}

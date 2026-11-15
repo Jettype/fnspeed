@@ -9,8 +9,8 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 ```
 
 填进侧栏「云端源」即可（命令行是 `POST /api/settings` 的 `cloudEndpoint`）。
-现在 34 个配置集 / 140 条端点。**标了速度的都是用 fnspeed 自己真跑出来的**（并发 2–8、8–10 秒，
-本机出口上限约 400Mbps），不是探活就算过。
+现在 34 个配置集 / 140 条端点。**标了速度的都是用 fnspeed 自己真跑出来的**（并发 2–8、
+8–10 秒，测试环境出口带宽明显高于表里所有峰值），不是探活就算过。
 
 | 分组 | 内容 |
 |---|---|

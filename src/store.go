@@ -2,15 +2,20 @@ package main
 
 // 配置持久化：默认配置与自建配置物理分离。
 //
-//	builtin.json —— 程序托管。每次启动比对 hash，不同就整体覆盖。
+//	builtin.json —— 出厂清单。每次启动比对 hash，不同就整体覆盖。
 //	user.json    —— 用户托管。安装、升级、恢复默认都不会碰它。
+//	cloud.json   —— 云端清单快照（1.6.0 起，由 cloud.go 维护）。
 //
 // 「默认分组删不掉」在这个结构下不可能发生：默认区的清理靠整体替换文件，
 // 不靠逐条比对 ID。用户不想看某个默认分组，就把它的 ID 记进 user.json 的
 // hidden —— 既不污染默认区，也不会被下次升级塞回来。
 //
 // user.json 只存「增量」：自建的、改过的、隐藏的。原样未动的默认分组不写入，
-// 否则第一次保存就会把默认区整份复制过来，builtin 的覆盖就失效了。
+// 否则第一次保存就会把默认区整份复制过来，默认区的覆盖就失效了。
+//
+// 1.6.0 起「默认区」不再绑定 builtin.json：云配置层可用时由 SetBase 接管，
+// 内存里的 base 就是云端清单。builtin.json 保持出厂内容不变，这样云端永久
+// 不可用、用户又想退回出厂源时还有得退。
 
 import (
 	"crypto/sha256"
@@ -52,6 +57,12 @@ type Store struct {
 	builtinPath string
 	userPath    string
 	legacyPath  string
+
+	// base 是当前生效的「默认区」。非 nil 表示已由云配置层接管（SetBase），
+	// nil 表示还没接管，按磁盘上的 builtin.json（出厂清单）走。
+	// baseRev 只用于日志与诊断。
+	base    []Profile
+	baseRev string
 }
 
 func NewStore(dir string) *Store {
@@ -65,6 +76,35 @@ func NewStore(dir string) *Store {
 
 // Path 返回用户可编辑的那份文件路径，用于界面展示。
 func (s *Store) Path() string { return s.userPath }
+
+// currentBase 返回当前默认区。调用方必须已持有 s.mu（或确认无并发写）。
+func (s *Store) currentBase() []Profile {
+	if s.base != nil {
+		return s.base
+	}
+	return DefaultPresets()
+}
+
+// SetBase 由云配置层调用，用云端清单接管默认区。
+//
+// 刻意不写 builtin.json：那份文件是「出厂兜底」，一旦被云端清单覆盖，
+// 云端永久不可用时用户就再也退不回去了。云端快照另有 etc/cloud.json。
+func (s *Store) SetBase(ps []Profile, rev string) {
+	if len(ps) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.base = ps
+	s.baseRev = rev
+}
+
+// BaseRev 返回当前默认区的来源标识：云端清单的 rev，空串表示出厂清单。
+func (s *Store) BaseRev() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.baseRev
+}
 
 // ---------------------------------------------------------------------------
 // 读写
@@ -239,13 +279,15 @@ func (s *Store) Load() (*Config, string) {
 }
 
 func (s *Store) loadLocked() (*Config, string) {
-	b, errB := s.readBuiltin()
-	if errB != nil {
-		ps := DefaultPresets()
-		b = &builtinDoc{Profiles: ps, Hash: builtinHash(ps)}
+	// 云配置层接管时以内存里的 base 为准；否则读磁盘上的出厂清单。
+	b := &builtinDoc{Profiles: s.currentBase()}
+	note := ""
+	if s.base == nil {
+		if disk, err := s.readBuiltin(); err == nil && len(disk.Profiles) > 0 {
+			b = disk
+		}
 	}
 	u, errU := s.readUser()
-	note := ""
 	if errU != nil && !os.IsNotExist(errU) {
 		u = &userDoc{}
 		note = "user.json 已损坏，本次以默认配置启动（原文件未动）"
@@ -283,7 +325,7 @@ func (s *Store) EnsureSeeded() (*Config, bool, string, error) {
 				return nil, false, "", fmt.Errorf("旧配置改名失败: %w", err)
 			}
 		}
-		ps := DefaultPresets()
+		ps := s.currentBase()
 		if err := s.writeBuiltin(&builtinDoc{Hash: builtinHash(ps), Profiles: ps}); err != nil {
 			return nil, false, "", err
 		}
@@ -329,7 +371,12 @@ func countProfiles(path string) int {
 }
 
 // syncBuiltinLocked 比对 hash，不同就整体覆盖默认区。返回是否写入。
+//
+// 云配置层接管期间直接跳过：builtin.json 是出厂兜底，不该被云端清单污染。
 func (s *Store) syncBuiltinLocked() (bool, error) {
+	if s.base != nil {
+		return false, nil
+	}
 	ps := DefaultPresets()
 	want := builtinHash(ps)
 	cur, err := s.readBuiltin()
@@ -342,16 +389,20 @@ func (s *Store) syncBuiltinLocked() (bool, error) {
 	return true, nil
 }
 
-// RestorePresets 恢复默认：强制重写默认区、清空隐藏列表，
-// 并丢掉用户对默认分组的改动（否则「恢复默认」名不副实）。
+// RestorePresets 恢复默认：把默认区重置成「当前生效的那一层」（云端清单或出厂清单），
+// 清空隐藏列表，并丢掉用户对默认分组的改动（否则「恢复默认」名不副实）。
 // 纯自建的分组原样保留 —— 这是「恢复默认」不是「清空重来」。
 func (s *Store) RestorePresets() (*Config, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ps := DefaultPresets()
-	if err := s.writeBuiltin(&builtinDoc{Hash: builtinHash(ps), Profiles: ps}); err != nil {
-		return nil, err
+	ps := s.currentBase()
+	if s.base == nil {
+		// 只有出厂清单需要落盘；云端清单随时可能被下一份快照替换，
+		// 写进 builtin.json 反而会让「退回出厂源」变得不可能。
+		if err := s.writeBuiltin(&builtinDoc{Hash: builtinHash(ps), Profiles: ps}); err != nil {
+			return nil, err
+		}
 	}
 	u, err := s.readUser()
 	if err != nil {
@@ -385,10 +436,10 @@ func (s *Store) Save(c *Config) error {
 }
 
 func (s *Store) saveLocked(c *Config) error {
-	b, err := s.readBuiltin()
-	if err != nil {
-		b = &builtinDoc{Profiles: DefaultPresets()}
-	}
+	// 判定「这一条是不是用户改的」必须以当前生效的默认区为基准：
+	// 云端接管时基准就是云端清单，否则没动过的云端分组会被当成用户副本
+	// 写进 user.json，之后云端更新就再也盖不动它了。
+	b := &builtinDoc{Profiles: s.currentBase()}
 	u, err := s.readUser()
 	if err != nil {
 		u = &userDoc{}
@@ -429,10 +480,7 @@ func (s *Store) Delete(ids ...string) (*Config, int, error) {
 		return c, 0, nil
 	}
 
-	b, err := s.readBuiltin()
-	if err != nil {
-		b = &builtinDoc{Profiles: DefaultPresets()}
-	}
+	b := &builtinDoc{Profiles: s.currentBase()}
 	u, err := s.readUser()
 	if err != nil {
 		u = &userDoc{}

@@ -3,9 +3,11 @@ package main
 // HTTP API + SSE。前端每 500ms 收一帧 /api/stream。
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -40,6 +42,7 @@ type App struct {
 	store      *Store
 	dataDir    string
 	settings   *SettingsStore
+	cloud      *CloudManager
 	note       string
 	lastReason string
 	lastURLs   []URLOut
@@ -47,8 +50,22 @@ type App struct {
 	lastRes    ResStat
 }
 
-func NewApp(dataDir string, store *Store, settings *SettingsStore) *App {
-	return &App{stats: NewStats(), dataDir: dataDir, store: store, settings: settings}
+func NewApp(dataDir string, store *Store, settings *SettingsStore, cloud *CloudManager) *App {
+	return &App{stats: NewStats(), dataDir: dataDir, store: store, settings: settings, cloud: cloud}
+}
+
+// onCloudChange 是云配置层「默认区变了」的回调。
+// 云端清单接管时把 store 的默认层换掉，再重建内存视图 —— 之后前端下一次
+// /api/profiles 就能看到新源，不需要重启进程。
+func (a *App) onCloudChange(ps []Profile, source, rev string) {
+	if source == "cloud" {
+		a.store.SetBase(ps, rev)
+	}
+	cfg, note := a.store.Load()
+	a.mu.Lock()
+	a.cfg, a.note = cfg, note
+	a.mu.Unlock()
+	log.Printf("云配置生效：来源 %s，rev=%s，%d 个配置集", source, rev, len(cfg.Profiles))
 }
 
 // handleSettings 读写全局测速参数（并发/时长/流量上限）。
@@ -72,6 +89,10 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return
+		}
+		// 端点地址可能被这次保存改掉：同步给云配置层，变化时它会立刻重拉。
+		if a.cloud != nil {
+			a.cloud.SetEndpoint(cloudEndpointOf(saved))
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"settings": saved})
 	default:
@@ -105,6 +126,52 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/ipinfo", a.handleIPInfo)
 	mux.HandleFunc("/api/hits", a.handleHits)
 	mux.HandleFunc("/api/history", a.handleHistory)
+	mux.HandleFunc("/api/cloud", a.handleCloud)
+	mux.HandleFunc("/api/cloud/refresh", a.handleCloudRefresh)
+}
+
+// handleCloud 返回云配置现状。GET /api/cloud
+func (a *App) handleCloud(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeErr(w, http.StatusMethodNotAllowed, "只接受 GET")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"cloud":     a.cloud.Snapshot(),
+		"cachePath": a.cloud.Path(),
+	})
+}
+
+// handleCloudRefresh 立即拉一次云端清单。POST /api/cloud/refresh
+//
+// 拉取失败也返回 200：界面要拿状态把「失败原因 + 仍在用哪一级」显示出来，
+// 用 5xx 会让前端只能弹一句网络错误。
+func (a *App) handleCloudRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "只接受 POST")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), cloudFetchTimeout+5*time.Second)
+	defer cancel()
+
+	changed, err := a.cloud.RefreshNow(ctx)
+
+	cfg, note := a.store.Load()
+	a.mu.Lock()
+	a.cfg, a.note = cfg, note
+	a.mu.Unlock()
+
+	out := map[string]any{
+		"cloud":     a.cloud.Snapshot(),
+		"config":    cfg,
+		"changed":   changed,
+		"path":      a.store.Path(),
+		"cachePath": a.cloud.Path(),
+	}
+	if err != nil {
+		out["error"] = err.Error()
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleRestorePresets 把内置测速源合并回配置（用户自建配置保留）。
@@ -499,7 +566,7 @@ func (a *App) handleProfiles(w http.ResponseWriter, r *http.Request) {
 		if cfg == nil {
 			cfg = emptyConfig()
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"config": cfg, "note": note, "path": a.store.Path(), "settings": a.settings.Get()})
+		writeJSON(w, http.StatusOK, map[string]any{"config": cfg, "note": note, "path": a.store.Path(), "settings": a.settings.Get(), "cloud": a.cloud.Snapshot()})
 
 	case http.MethodPost:
 		raw, err := readAllLimited(r, 4<<20)

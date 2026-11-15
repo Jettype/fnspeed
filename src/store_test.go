@@ -272,3 +272,135 @@ func TestBuiltinHashMismatchRewrites(t *testing.T) {
 		t.Fatalf("覆盖后 %d 条，期望 %d 条", len(cfg.Profiles), len(DefaultPresets()))
 	}
 }
+
+// ---------------------------------------------------------------------------
+// 云配置层接管默认区（1.6.0）
+// ---------------------------------------------------------------------------
+
+func mkCloudProfile(id, url string) Profile {
+	p := Profile{ID: id, Name: id, Mode: "down", DownloadURLs: []string{url}}
+	normalizeProfile(&p)
+	return p
+}
+
+// 云端接管后：出厂分组退位，但 user.json 不因「保存一次」被灌满。
+func TestCloudBaseDoesNotLeakIntoUser(t *testing.T) {
+	s, dir := newTestStore(t)
+	if _, _, _, err := s.EnsureSeeded(); err != nil {
+		t.Fatal(err)
+	}
+
+	s.SetBase([]Profile{
+		mkCloudProfile("cloud-a", "https://cdn.example.com/a.bin"),
+		mkCloudProfile("cloud-b", "https://cdn.example.com/b.bin"),
+	}, "r1")
+
+	cfg, _ := s.Load()
+	if len(cfg.Profiles) != 2 {
+		t.Fatalf("默认区应为云端 2 条，实际 %d", len(cfg.Profiles))
+	}
+	if findProfile(cfg, "cn-tencent") != nil {
+		t.Fatal("云端接管后出厂分组不该再出现")
+	}
+
+	// 只改其中一条，其余原样保存
+	cfg.Profiles[0].DownloadEndpoints = []Endpoint{{URL: "https://cdn.example.com/mine.bin", Method: "GET"}}
+	cfg.Profiles[0].DownloadURLs = nil
+	if err := s.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	u := readUserDoc(t, dir)
+	if len(u.Profiles) != 1 {
+		t.Fatalf("只有被改过的那条该落进 user.json，实际 %d 条", len(u.Profiles))
+	}
+	if u.Profiles[0].ID != "cloud-a" || u.Profiles[0].ForkedFrom != "cloud-a" {
+		t.Fatalf("用户副本标记不对: %+v", u.Profiles[0])
+	}
+	for _, p := range u.Profiles {
+		if p.ID == "cloud-b" {
+			t.Fatal("未改动的云端分组不该被写进 user.json —— 否则云端更新会被它挡住")
+		}
+	}
+}
+
+// 云端发新版：用户改过的保持用户的值，没改过的跟着云端走。
+func TestCloudUpdateRespectsUserEdits(t *testing.T) {
+	s, _ := newTestStore(t)
+	if _, _, _, err := s.EnsureSeeded(); err != nil {
+		t.Fatal(err)
+	}
+	s.SetBase([]Profile{
+		mkCloudProfile("cloud-a", "https://cdn.example.com/a.bin"),
+		mkCloudProfile("cloud-b", "https://cdn.example.com/b.bin"),
+	}, "r1")
+
+	cfg, _ := s.Load()
+	cfg.Profiles[0].DownloadEndpoints = []Endpoint{{URL: "https://cdn.example.com/mine.bin", Method: "GET"}}
+	cfg.Profiles[0].DownloadURLs = nil
+	if err := s.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	s.SetBase([]Profile{
+		mkCloudProfile("cloud-a", "https://cdn.example.com/a-v2.bin"),
+		mkCloudProfile("cloud-b", "https://cdn.example.com/b-v2.bin"),
+	}, "r2")
+	cfg, _ = s.Load()
+
+	a := findProfile(cfg, "cloud-a")
+	if a == nil || a.DownloadEndpoints[0].URL != "https://cdn.example.com/mine.bin" {
+		t.Fatalf("用户改过的 cloud-a 应保留自己的地址，实际 %+v", a)
+	}
+	b := findProfile(cfg, "cloud-b")
+	if b == nil || b.DownloadEndpoints[0].URL != "https://cdn.example.com/b-v2.bin" {
+		t.Fatalf("没改过的 cloud-b 应跟随云端新值，实际 %+v", b)
+	}
+}
+
+// 云端下架一个分组：它必须真的消失，不能被出厂清单接住复活。
+func TestCloudRemovalTakesEffect(t *testing.T) {
+	s, _ := newTestStore(t)
+	if _, _, _, err := s.EnsureSeeded(); err != nil {
+		t.Fatal(err)
+	}
+	s.SetBase([]Profile{
+		mkCloudProfile("cloud-a", "https://cdn.example.com/a.bin"),
+		mkCloudProfile("cloud-b", "https://cdn.example.com/b.bin"),
+	}, "r1")
+	if _, _, err := s.Delete("cloud-b"); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, _ := s.Load()
+	if findProfile(cfg, "cloud-b") != nil {
+		t.Fatal("删掉的分组不该复活")
+	}
+	if len(cfg.Profiles) != 1 {
+		t.Fatalf("应剩 1 条，实际 %d", len(cfg.Profiles))
+	}
+}
+
+// 云端接管期间不碰 builtin.json：那份文件必须一直是出厂清单，
+// 否则云端永久不可用时用户退不回去。
+func TestCloudBaseKeepsBuiltinFile(t *testing.T) {
+	s, dir := newTestStore(t)
+	if _, _, _, err := s.EnsureSeeded(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(filepath.Join(dir, builtinFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SetBase([]Profile{mkCloudProfile("cloud-a", "https://cdn.example.com/a.bin")}, "r1")
+	if _, _, _, err := s.EnsureSeeded(); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(filepath.Join(dir, builtinFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("云端接管期间 builtin.json 不该被改写")
+	}
+}

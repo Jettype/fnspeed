@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"flag"
 	"log"
@@ -27,6 +28,9 @@ func main() {
 		etcDir   = flag.String("etc-dir", "", "配置目录 etc/（builtin.json / user.json 落盘位置）")
 		basePath = flag.String("base-path", "/app/fnspeed", "fnOS 网关挂载前缀")
 		prof     = flag.Bool("pprof", false, "开放 /debug/pprof/ 性能剖析入口（排障用，仅本机回环可访问）")
+
+		cloudSecret    = flag.String("cloud-secret", "", "云端清单 HMAC 校验密钥（优先级：本参数 > 环境变量 FNSPEED_CLOUD_SECRET > etc/cloud-secret 文件）")
+		cloudAllowHTTP = flag.Bool("cloud-allow-http", false, "允许用 http 拉取云端清单（仅内网调试；默认强制 https）")
 	)
 	flag.Parse()
 
@@ -49,7 +53,31 @@ func main() {
 
 	store := NewStore(*etcDir)
 	settings := NewSettingsStore(*etcDir)
-	app := NewApp(*dataDir, store, settings)
+
+	// 云配置要在 EnsureSeeded 之前读一次缓存：这样首次启动时默认区
+	// 直接就是「云端清单」，界面第一帧看到的就是最新源。
+	cloud := NewCloudManager(*etcDir)
+	secret := *cloudSecret
+	if secret == "" {
+		secret = os.Getenv("FNSPEED_CLOUD_SECRET")
+	}
+	if secret != "" {
+		cloud.SetSecret(secret)
+	}
+	cloud.SetAllowHTTP(*cloudAllowHTTP)
+	cloud.SetEndpoint(cloudEndpointOf(settings.Get()))
+
+	if cloud.LoadCache() {
+		if ps, src := cloud.Base(); src == "cloud" {
+			rev := cloud.Snapshot().Rev
+			store.SetBase(ps, rev)
+			log.Printf("云端清单已从缓存恢复：rev=%s，%d 个配置集（%s）", rev, len(ps), cloud.Path())
+		}
+	}
+
+	app := NewApp(*dataDir, store, settings, cloud)
+	cloud.SetOnChange(app.onCloudChange)
+
 	log.Printf("全局参数：并发 %d / 时长 %ds（etc/settings.json）", settings.Get().Concurrency, settings.Get().DurationSec)
 	cfg, seeded, note, err := store.EnsureSeeded()
 	if err != nil {
@@ -63,6 +91,10 @@ func main() {
 		log.Printf("默认配置已同步（%d 个配置集），自建配置目录 %s", len(cfg.Profiles), store.Path())
 	}
 	log.Printf("配置集 %d 个，用户区 %s", len(cfg.Profiles), store.Path())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cloud.Start(ctx)
 
 	mux := http.NewServeMux()
 	app.Register(mux)

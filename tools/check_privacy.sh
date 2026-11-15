@@ -76,9 +76,13 @@ block_on 'sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' "疑似 API
 
 # 个人账号名（go.mod 的模块路径是必需的，放行）
 # 上架飞牛应用中心要求在 manifest 里写明真实维护者与发布者，那是随包公开的应用元数据，
-# 不是本机信息；docs/SUBMIT.md 的「开发者」一栏同理。除这三处外一律阻断。
-block_on 'jettype|sakuta|坂田' "出现个人账号名" \
-  'go\.mod:[0-9]+:module github\.com/jettype/fnspeed|^manifest:[0-9]+:(maintainer|distributor)[[:space:]]|^docs/SUBMIT\.md:[0-9]+:\| 开发者\*'
+# 不是本机信息；docs/SUBMIT.md 的「开发者」一栏同理。
+# cloud.go 与 cloud/README.md 里的默认清单地址是 raw.githubusercontent.com/Jettype/fnspeed，
+# 与 go.mod 的模块路径指向同一个公开仓库，属于公开标识而非本机信息。
+# 大小写两种写法都查（GitHub 用户名不区分大小写，只查小写会漏掉 Jettype 形式）。
+# 除这几处外一律阻断。
+block_on '[Jj]ettype|sakuta|坂田' "出现个人账号名" \
+  'go\.mod:[0-9]+:module github\.com/[Jj]ettype/fnspeed|^manifest:[0-9]+:(maintainer|distributor)[[:space:]]|^docs/SUBMIT\.md:[0-9]+:\| 开发者\*|raw\.githubusercontent\.com/[Jj]ettype/fnspeed|github\.com/[Jj]ettype/fnspeed'
 
 echo "==> 提醒项"
 
