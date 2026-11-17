@@ -12,16 +12,46 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 ```
 
 填进侧栏「云端源」即可（命令行是 `POST /api/settings` 的 `cloudEndpoint`）。
-现在 34 个配置集 / 140 条端点。**标了速度的都是用 fnspeed 自己真跑出来的**（并发 2–8、
-8–10 秒，测试环境出口带宽明显高于表里所有峰值），不是探活就算过。
+现在 34 个配置集 / 137 条端点（`rev` = 2026-11-17.1）。**标了速度的都是用 fnspeed 自己真跑出来的**
+（并发 2–8、8–10 秒，测试环境出口带宽明显高于表里所有峰值），不是探活就算过。
 
 | 分组 | 内容 |
 |---|---|
-| 国内 | 腾讯 3 / 阿里 4 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十一源聚合 11 / 厂商大文件 9 / 微软 2 · B站 5 · 字节 1 / **米哈游 6 · 库洛 5 · 完美 1 · 网易 1** / 大文件补充 4 |
-| 国外 | Cloudflare / OVH / Vultr 单点 4 / 海外六源聚合 7 / Vultr 亚太 5·欧洲 7·美洲 9·中东非 2 / **DataPacket 亚太 3·欧洲 9·北美 7 / 10GB 档 5 / LibreSpeed 11** |
+| 国内 | 腾讯 4 / 阿里 6 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十四源聚合 14 / 厂商大文件 7 / 微软 2 · B站 5 · 字节 1 / **米哈游 6 · 库洛 2 · 完美 1 · 网易 1** / 大文件补充 3 |
+| 国外 | Cloudflare / OVH / Vultr 单点 4 / 海外六源聚合 6 / Vultr 亚太 5·欧洲 7·美洲 9·中东非 2 / **DataPacket 东京 1·欧洲 9·北美 7 / 10GB 档 5 / LibreSpeed 11** |
 | 上传 | **LibreSpeed 11** / Cloudflare `__up` / 本机 sink |
 
-### 实测速度（并发 2，单源）
+### 2026-11-17 全量复测与清理
+
+140 条端点逐条测（先 8 路并发筛可用性，可疑项再单线程 6 秒复测），端点 140 → 137。
+
+**删除（失效）**
+
+- 网易新闻 APK `static.ws.126.net/.../newsreader_netease_gw.apk` — 403
+- 原神 `.003` 分卷 — 404（`.001` 同样 404，CDN 缓存不一致；换 `.004`）
+- Cachefly `100mb.test` — 拒连
+- DataPacket 香港 — 8.6s 无响应；新加坡 — 0.01MB/s
+- WPS 安装包 — 0.10MB/s（金山 KS3 对本机出口限速）
+
+**删除（国内低速，单线程 < 2MB/s）**
+
+- 库洛腾讯云 0.11MB/s、火山引擎 0.22MB/s、Akamai 0.76MB/s（只留 AWS 10.1MB/s）
+- 网易视频 MP4 1.28MB/s
+
+**新增（单线程实测）**
+
+- 企业微信 `WeCom_4.1.36.6004.exe` 523MB — 12.1MB/s（腾讯 dldir1）
+- npmmirror electron 33 108MB — 7.7MB/s
+- Chrome for Testing 131 157MB — 7.8MB/s
+
+**复测要点**
+
+- 单线程下多数"慢"源其实不慢：npmmirror 5.7–10.1、天翼云 5.1/5.2、B站 6.3–12.6、
+  微软 6.9/9.4MB/s。首轮 8 路并发会把单条压到 0.1MB/s，**不能用并发数据判源**。
+- 镜像站依旧全线不可用：清华/中科大 403、阿里 302 后拒连、华为/腾讯云镜像 404。
+- 跨境单条 0.06–15MB/s 属出口瓶颈，不按绝对速度删；OVH 法国 15.2MB/s 是本次最快的一条。
+
+### 实测速度（2026-11-15，并发 2，单源；下表为当时记录，失效项已于 11-17 清理）
 
 | 源 | 速度 | 备注 |
 |---|---|---|
@@ -34,18 +64,19 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 | 米哈游原神分卷 10GB | 327 Mbps | 腾讯 COS |
 | 星铁分卷 7.0GB | 269 Mbps | |
 | 学习强国 266MB | 142 Mbps | `latest/` 路径，不随版本变 |
-| WPS 296MB | 119 Mbps | 金山 KS3 |
+| WPS 296MB | 119 Mbps | 金山 KS3（11-17 复测跌到 0.10MB/s，已删） |
 | LibreSpeed `garbage.php` | 119 Mbps | 国际源里最快，且能指定大小 |
 | Apple IPSW 2975MB | 54 Mbps | http 明文 |
-| DataPacket 法兰克福 / 香港 | 36 / 26 Mbps | 19 节点全通但普遍慢 |
+| DataPacket 法兰克福 / 香港 | 36 / 26 Mbps | 19 节点全通但普遍慢（香港 11-17 已删） |
 | Hivelocity 10GiB | 32 Mbps | |
 | truefilesize 1GB | 7 Mbps | 但 CC0 许可最干净 |
 
 2026-11 第三轮：按游戏大厂补的四组（实测速度都很好）
 
-- **库洛 · 鸣潮**（5 条）：PC 客户端 pak 分卷，AWS / 腾讯云 / 火山引擎三条 CDN 挂同一份文件。
-  最大的是 18.5GB 的 HD 包。**同一文件三个 CDN 差距很大**（AWS 356、腾讯云 75、火山 51 Mbps），
-  所以三条都留。URL 带 `3.7.1` 版本目录和随机哈希，游戏更新即失效，重取方法写在 desc 里：
+- **库洛 · 鸣潮**（11-17 复测后只留 2 条）：PC 客户端 pak 分卷，AWS / 腾讯云 / 火山引擎三条 CDN
+  挂同一份文件。**同一文件三个 CDN 差距很大**（11-15：AWS 356、腾讯云 75、火山 51 Mbps；
+  11-17 单线程：AWS 10.1、腾讯云 0.11、火山 0.22MB/s），后两条低于阈值已删，只留 AWS。
+  URL 带 `3.7.1` 版本目录和随机哈希，游戏更新即失效，重取方法写在 desc 里：
   先取 `launcher/launcher/50004_…/G153/index.json` 拿 `resourcesBasePath`，
   再取 `…/resource/50004/<version>/indexFile.json` 拿 `dest`，拼 `{cdn}/{basePath}/{dest}`
 - **完美世界**（1 条）：`world2dl.wmupd.com` 完整客户端 9.0GB，360Mbps
@@ -62,14 +93,15 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
   URL 带版本时间戳目录，**游戏更新就失效** —— 用官方 API 拿最新：
   `hyp-api.mihoyo.com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1&game_ids[]=<id>`
   （原神 `1Z8W5NHUQb`、星铁 `64kMb5iAWu`、绝区零 `x6znKlJ0xK`）。
-  注意原神 `.001` 会偶发 404（CDN 节点缓存不一致，重试或换卷即可），所以用的是 `.002/.003`
+  注意原神 `.001` 会偶发 404（CDN 节点缓存不一致）；11-17 复测 `.003` 也 404，现用 `.002/.004`
 - **DataPacket/CDN77**：官方测速文件，`{三字码}.download.datapacket.com/10000mb.bin`，
   单文件 9.5GB，19 个节点全覆盖。**全是 http 明文**，且实测只有 26–36Mbps，靠节点叠加才有意义
 - **LibreSpeed 公共节点**：`garbage.php?ckSize=512` 实时生成 512MB 不可压缩随机流，
   `no-store` 不缓存——不会出现「同一个文件被 CDN 优化过所以测不准」。不支持 Range，
   引擎从头读、读完重连，正好是要的持续流。上传侧同一节点换 `empty.php`，
   PUT/POST 都吃（实测各 200），是除自建 sink 外唯一成规模的上传目标
-- **国内大文件补充**：王者荣耀 1.9GB、学习强国 266MB、WPS 296MB、Apple IPSW 3GB。
+- **国内大文件补充**：王者荣耀 1.9GB、学习强国 266MB、Apple IPSW 3GB（WPS 296MB 因 11-17
+  复测只有 0.10MB/s 已删）。
   王者荣耀另三条三网定向域名实测不可用：联通 `ml-dlied4` 解析失败、移动 `cdntips` 哈希子域失败、
   电信 `csy.tcdnos` 回 **418 风控**（引擎已把 418 识别为「目标端风控拦截」）
 

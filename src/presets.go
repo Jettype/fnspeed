@@ -33,15 +33,19 @@ const (
 // 百万用户同时拉几 GB 文件用的，不拦、不限速、支持 Range。
 const (
 	// 腾讯 CDN：dlied4 走腾讯云 COS，dldir1 是腾讯自建分发
-	uTencentGame = "https://dlied4.myapp.com/myapp/1104466820/cos.release-40109/10040714_com.tencent.tmgp.sgame_a2480356_8.2.1.9_F0BvnI.apk" // 1968MB · 9.7MB/s
-	uWeChat      = "https://dldir1.qq.com/weixin/Windows/WeChatSetup.exe"                                                                    // 270MB · 3.2MB/s
+	uTencentGame = "https://dlied4.myapp.com/myapp/1104466820/cos.release-40109/10040714_com.tencent.tmgp.sgame_a2480356_8.2.1.9_F0BvnI.apk" // 1968MB · 15.8MB/s
+	uWeChat      = "https://dldir1.qq.com/weixin/Windows/WeChatSetup.exe"                                                                    // 270MB · 3.1MB/s
 	uWeChatX86   = "https://dldir1.qq.com/weixin/Windows/WeChatSetup_x86.exe"                                                                // 175MB · 3.1MB/s
+	// 企业微信：523MB。路径带版本号，官方发新版后需换名（dldir1 同域，不另建 CDN）
+	uWeCom = "https://dldir1.qq.com/wework/work_weixin/WeCom_4.1.36.6004.exe" // 523MB · 12.1MB/s
 
 	// 阿里 CDN：npmmirror（淘宝 npm 镜像）走阿里云 CDN，是国内最好用的大文件海外/国内双通源
-	uNpmNode18 = "https://registry.npmmirror.com/-/binary/node/v18.20.4/node-v18.20.4.tar.gz"              // 81MB · 11.7MB/s
-	uNpmNode22 = "https://registry.npmmirror.com/-/binary/node/v22.11.0/node-v22.11.0.tar.gz"              // 92MB · 9.0MB/s
-	uNpmElec22 = "https://registry.npmmirror.com/-/binary/electron/v22.0.0/electron-v22.0.0-linux-x64.zip" // 89MB · 10.9MB/s
-	uNpmElec28 = "https://registry.npmmirror.com/-/binary/electron/v28.0.0/electron-v28.0.0-win32-x64.zip" // 111MB · 12.6MB/s
+	uNpmNode18 = "https://registry.npmmirror.com/-/binary/node/v18.20.4/node-v18.20.4.tar.gz"                      // 81MB · 10.1MB/s
+	uNpmNode22 = "https://registry.npmmirror.com/-/binary/node/v22.11.0/node-v22.11.0.tar.gz"                      // 92MB · 5.7MB/s
+	uNpmElec22 = "https://registry.npmmirror.com/-/binary/electron/v22.0.0/electron-v22.0.0-linux-x64.zip"         // 89MB · 8.1MB/s
+	uNpmElec28 = "https://registry.npmmirror.com/-/binary/electron/v28.0.0/electron-v28.0.0-win32-x64.zip"         // 111MB · 9.7MB/s
+	uNpmElec33 = "https://registry.npmmirror.com/-/binary/electron/v33.0.0/electron-v33.0.0-win32-x64.zip"         // 108MB · 7.7MB/s
+	uNpmChrome = "https://registry.npmmirror.com/-/binary/chrome-for-testing/131.0.6778.85/win64/chrome-win64.zip" // 157MB · 7.8MB/s
 
 	// 迅雷 CDN
 	uXunlei     = "https://down.sandai.net/thunder11/XunLeiSetup12.0.6.2440.exe" // 172MB · 14.1MB/s
@@ -55,13 +59,13 @@ const (
 	// 不像米哈游/库洛那样把版本号写进路径 —— 这是它能做预设的关键。
 	uArknights = "https://ak.hypergryph.com/downloads/android_lastest" // 1934MB · 302×2 · 支持 Range
 
-	uCF       = "https://speed.cloudflare.com/__down?during=download&bytes=99999999" // 单请求上限 99,999,999 字节，≥1e8 直接 403
-	uOVH      = "https://proof.ovh.net/files/100Mb.dat"
-	uVultrJP  = "https://hnd-jp-ping.vultr.com/vultr.com.100MB.bin"
-	uVultrSG  = "https://sgp-ping.vultr.com/vultr.com.100MB.bin"
-	uVultrUS  = "https://nj-us-ping.vultr.com/vultr.com.100MB.bin"
-	uVultrDE  = "https://fra-de-ping.vultr.com/vultr.com.100MB.bin"
-	uCachefly = "https://cachefly.cachefly.net/100mb.test"
+	uCF      = "https://speed.cloudflare.com/__down?during=download&bytes=99999999" // 单请求上限 99,999,999 字节，≥1e8 直接 403
+	uOVH     = "https://proof.ovh.net/files/100Mb.dat"
+	uVultrJP = "https://hnd-jp-ping.vultr.com/vultr.com.100MB.bin"
+	uVultrSG = "https://sgp-ping.vultr.com/vultr.com.100MB.bin"
+	uVultrUS = "https://nj-us-ping.vultr.com/vultr.com.100MB.bin"
+	uVultrDE = "https://fra-de-ping.vultr.com/vultr.com.100MB.bin"
+	// 原 uCachefly（cachefly.cachefly.net/100mb.test）2026-11 复测拒连，已剔除。
 
 	uCFUp   = "https://speed.cloudflare.com/__up"
 	uSinkUp = "http://127.0.0.1:8977/up"
@@ -84,18 +88,18 @@ func presetProfile(id, group, name, desc, mode string, dl, ul []string) Profile 
 func DefaultPresets() []Profile {
 	return []Profile{
 		// ---------------- 国内 · 厂商自有 CDN（全部实测可用） ----------------
-		presetProfile("cn-tencent", "国内", "腾讯 CDN · 3源", "王者荣耀安装包 1.9GB + 微信 PC/x86，腾讯自建分发，不拦不限", "down",
-			[]string{uTencentGame, uWeChat, uWeChatX86}, nil),
-		presetProfile("cn-aliyun", "国内", "阿里 CDN · npmmirror 4源", "node/electron 大包 81–111MB，走阿里云 CDN，国内海外都稳", "down",
-			[]string{uNpmNode18, uNpmNode22, uNpmElec22, uNpmElec28}, nil),
+		presetProfile("cn-tencent", "国内", "腾讯 CDN · 4源", "王者荣耀 1968MB + 微信 PC/x86 + 企业微信 523MB，腾讯自建分发，不拦不限", "down",
+			[]string{uTencentGame, uWeChat, uWeChatX86, uWeCom}, nil),
+		presetProfile("cn-aliyun", "国内", "阿里 CDN · npmmirror 6源", "node 18/22、electron 22/28/33、Chrome for Testing 131，83–157MB，走阿里云 CDN", "down",
+			[]string{uNpmNode18, uNpmNode22, uNpmElec22, uNpmElec28, uNpmElec33, uNpmChrome}, nil),
 		presetProfile("cn-xunlei", "国内", "迅雷 CDN · 2源", "迅雷安装包 172MB + 13MB，自建分发节点", "down",
 			[]string{uXunlei, uXunleiMini}, nil),
 		presetProfile("cn-apple", "国内", "苹果 CDN", "2.9GB iOS 固件，苹果自有 CDN，境内速度最好的一条", "down",
 			[]string{uApple}, nil),
 		presetProfile("cn-game", "国内", "游戏 CDN · 鹰角", "1.8GB 明日方舟安卓包，走字节跳动 CDN，官方 latest 别名不会随版本失效", "down",
 			[]string{uArknights}, nil),
-		presetProfile("cn-multi", "国内", "国内十一源聚合 ⭐", "腾讯 3 + 阿里 4 + 迅雷 2 + 苹果 1 + 鹰角 1，任意一个挂了自动换源，最容易跑满", "down",
-			[]string{uTencentGame, uWeChat, uWeChatX86, uNpmNode18, uNpmNode22, uNpmElec22, uNpmElec28, uXunlei, uXunleiMini, uApple, uArknights}, nil),
+		presetProfile("cn-multi", "国内", "国内十四源聚合 ⭐", "腾讯 4 + 阿里 6 + 迅雷 2 + 苹果 1 + 鹰角 1，任意一个挂了自动换源，最容易跑满", "down",
+			[]string{uTencentGame, uWeChat, uWeChatX86, uWeCom, uNpmNode18, uNpmNode22, uNpmElec22, uNpmElec28, uNpmElec33, uNpmChrome, uXunlei, uXunleiMini, uApple, uArknights}, nil),
 
 		// ---------------- 国外 ----------------
 		presetProfile("intl-cf", "国外", "Cloudflare", "100MB 循环，全球 Anycast，最稳的跨境基准", "down",
@@ -110,8 +114,8 @@ func DefaultPresets() []Profile {
 			[]string{uVultrUS}, nil),
 		presetProfile("intl-vultr-de", "国外", "Vultr 法兰克福", "100MB，德国节点，测欧洲回程", "down",
 			[]string{uVultrDE}, nil),
-		presetProfile("intl-multi", "国外", "海外六源聚合 ⭐", "Cloudflare+OVH+Vultr 日/新/美/德+Cachefly，跨境最容易跑出峰值", "down",
-			[]string{uCF, uOVH, uVultrJP, uVultrSG, uVultrUS, uVultrDE, uCachefly}, nil),
+		presetProfile("intl-multi", "国外", "海外六源聚合 ⭐", "Cloudflare+OVH+Vultr 日/新/美/德，跨境最容易跑出峰值（Cachefly 实测拒连，已剔除）", "down",
+			[]string{uCF, uOVH, uVultrJP, uVultrSG, uVultrUS, uVultrDE}, nil),
 
 		// ---------------- 上传 ----------------
 		presetProfile("up-cf", "上传", "Cloudflare 上传", "公共可写端点，无需自建接收端，直接测上行", "up",
