@@ -3,9 +3,11 @@ package main
 // 调度器：负责「爬坡」与「掉速补偿」，是整个测速策略的核心。
 //
 // 爬坡（贪心加流，不设时间上限）：
-//   起始 4 流。每 2s 采样一次 3s 均速，加一批流后等 4s（新连接慢启动）再比较；
-//   只要吞吐较加流前增长 ≥5%，就继续加，加到 64 流或连续两轮无增益为止。
-//   旧实现「10 秒后强制锁定」会让千兆链路永远停在 6 条流上，已废弃。
+//   起始 8 流（海外 12 流）。每 2s 采样一次 3s 均速，加一批流后等 3s（新连接慢启动）
+//   再比较；只要吞吐较加流前增长 ≥5%，就继续加，加到 64 流或连续两轮无增益为止。
+//   1.6.1 起并发不足 16 时按「翻倍」加：8→16 一轮到位，而不是每轮只加 2 条。
+//   旧实现「10 秒后强制锁定」会让千兆链路永远停在 6 条流上，已废弃；
+//   每轮 +2 的老步长则会让跨境源爬 70 秒才接近上限，用户看到的是「速度慢慢涨」。
 //
 // 补偿：锁定后若吞吐跌到拐点的 75% 以下，先剔除速率低于中位数 50% 的慢流
 //       并重开连接；若所有流健康仍然跌，则 +1 流重置拥塞窗口。
@@ -146,7 +148,7 @@ func (s *scheduler) evaluate(p ratePoint, now time.Time) {
 	n := s.e.StreamCount()
 
 	if s.probing {
-		if now.Sub(s.probeAt) < 4*time.Second {
+		if now.Sub(s.probeAt) < 3*time.Second {
 			return // 新连接还在慢启动，此刻比较会误判为「无增益」
 		}
 		s.probing = false
@@ -223,16 +225,25 @@ func (s *scheduler) evaluate(p ratePoint, now time.Time) {
 	}
 }
 
-// addBatch 加一批流，并记录基线等待观察。步长随并发数递增，
-// 小并发时细粒度找拐点，大并发时快速拉满。
+// addBatch 加一批流，并记录基线等待观察。
+//
+// 步长按「当前并发」决定：
+//   - 不足 16 条时翻倍（8→16、16 之后按档位走）：跨境/高 RTT 链路要先把
+//     并发拉到能填满 BDP 的量级，再谈拐点；每轮 +2 会白等几十秒。
+//   - 16 条以上改用 3/4 的小步长，避免一步跨过真实拐点。
 func (s *scheduler) addBatch(cur float64, now time.Time) {
 	n := s.e.StreamCount()
-	step := 2
+	step := rampStep
 	switch {
+	case n < 16:
+		step = n // 翻倍；n 至少为 1
 	case n >= 24:
 		step = 4
 	case n >= 8:
 		step = 3
+	}
+	if step < rampStep {
+		step = rampStep
 	}
 
 	added := 0

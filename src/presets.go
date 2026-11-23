@@ -67,6 +67,17 @@ const (
 	uVultrDE = "https://fra-de-ping.vultr.com/vultr.com.100MB.bin"
 	// 原 uCachefly（cachefly.cachefly.net/100mb.test）2026-11 复测拒连，已剔除。
 
+	// ---- 2026-11-23 实测新增：都是「大厂自有 CDN + 国内可直连」----
+	// 判据是单线程直连（不走代理）跑到 3 MB/s 以上，且必须支持 Range。
+	// 这一批的意义在于换掉了「一家供应商多个镜像」的写法：
+	// 之前海外组 34 条里有 23 条是 Vultr、17 条是 DataPacket，
+	// 同一家抖一下整组跟着抖，看着就像「海外源全挂」。
+	uKernelFastly = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.tar.xz"            // 133MB · Fastly · 6.8MB/s
+	uDockerCF     = "https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz" // 62MB · AWS CloudFront · 5.8MB/s
+	uGoGoogle     = "https://dl.google.com/go/go1.22.0.linux-amd64.tar.gz"                     // 66MB · Google · 17MB/s
+	uHetznerSG    = "https://sin-speed.hetzner.com/1GB.bin"                                    // 1000MB · Hetzner 新加坡 · 3.7MB/s
+	uHetznerASH   = "https://ash-speed.hetzner.com/1GB.bin"                                    // 1000MB · Hetzner 美东 · 4.2MB/s
+
 	uCFUp   = "https://speed.cloudflare.com/__up"
 	uSinkUp = "http://127.0.0.1:8977/up"
 )
@@ -114,8 +125,16 @@ func DefaultPresets() []Profile {
 			[]string{uVultrUS}, nil),
 		presetProfile("intl-vultr-de", "国外", "Vultr 法兰克福", "100MB，德国节点，测欧洲回程", "down",
 			[]string{uVultrDE}, nil),
-		presetProfile("intl-multi", "国外", "海外六源聚合 ⭐", "Cloudflare+OVH+Vultr 日/新/美/德，跨境最容易跑出峰值（Cachefly 实测拒连，已剔除）", "down",
-			[]string{uCF, uOVH, uVultrJP, uVultrSG, uVultrUS, uVultrDE}, nil),
+		presetProfile("intl-fastly", "国外", "Fastly · kernel.org", "133MB Linux 内核源码，走 Fastly 自有骨干，实测 6.8MB/s", "down",
+			[]string{uKernelFastly}, nil),
+		presetProfile("intl-cloudfront", "国外", "AWS CloudFront · docker", "62MB docker 静态包，CloudFront 边缘，实测 5.8MB/s", "down",
+			[]string{uDockerCF}, nil),
+		presetProfile("intl-google", "国外", "Google CDN · golang", "66MB Go 发行包，Google 自有 CDN，实测 17MB/s，是这批里最快的", "down",
+			[]string{uGoGoogle}, nil),
+		presetProfile("intl-hetzner", "国外", "Hetzner 新加坡/美东 · 2源", "各 1GB，新加坡与阿什本节点，实测 3.7/4.2MB/s", "down",
+			[]string{uHetznerSG, uHetznerASH}, nil),
+		presetProfile("intl-multi", "国外", "海外八源聚合 ⭐", "Cloudflare+OVH+Vultr 日/新+Fastly+CloudFront+Google+Hetzner，八个不同厂商，单家抖动不拖垮全局", "down",
+			[]string{uCF, uOVH, uVultrJP, uVultrSG, uKernelFastly, uDockerCF, uGoGoogle, uHetznerSG}, nil),
 
 		// ---------------- 上传 ----------------
 		presetProfile("up-cf", "上传", "Cloudflare 上传", "公共可写端点，无需自建接收端，直接测上行", "up",

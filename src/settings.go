@@ -36,7 +36,15 @@ type GlobalSettings struct {
 	ShowHit bool `json:"showHit"`
 	// Region 是定向测速位置，空串或 auto 表示就近（跟随本机 DNS 调度）。
 	// 非空时用 ECS 让 CDN 返回该省该运营商的节点，再强制拨号过去。
+	// 1.6.1 起也可以是海外城市（intl-*），用来测跨境回程或指定海外 POP。
 	Region string `json:"region,omitempty"`
+
+	// Prefer 是线路偏好：
+	//	""         就近（本机 DNS 说了算）
+	//	"overseas" 海外优先 —— 不带 ECS，改用海外公共 DNS 解析，
+	//	           让 CDN 按海外解析器的位置返回海外边缘节点。
+	// 与 Region 共存时 Region 优先（明确指定城市比"偏海外"更具体）。
+	Prefer string `json:"prefer,omitempty"`
 
 	// CloudEndpoint 是云配置清单地址。留空用编译期默认值。
 	// 放在 settings 而不是配置文件里，是为了换地址不必改动 builtin/user 两份清单。
@@ -151,6 +159,13 @@ func normalizeSettings(g *GlobalSettings) {
 		if _, ok := regionIndex[g.Region]; !ok {
 			g.Region = ""
 		}
+	}
+	// 线路偏好只有两档；认不出的值回落就近，别让一个拼错的字符串
+	// 悄悄改掉解析路径（那会表现为「海外源时快时慢」而查不出原因）。
+	switch g.Prefer {
+	case "overseas":
+	default:
+		g.Prefer = ""
 	}
 	g.CloudEndpoint = strings.TrimSpace(g.CloudEndpoint)
 	if len(g.CloudEndpoint) > 512 {

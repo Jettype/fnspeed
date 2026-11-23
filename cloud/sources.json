@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-17.1",
+  "rev": "2026-11-23.1",
   "ttlSec": 21600,
   "issuedAt": 1794930086,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "公共测速源，2026-11-17 全量复测：剔除 10 条失效/低速端点，新增 3 条腾讯/阿里大文件，替换 1 条 404 分卷",
+  "notice": "公共测速源，2026-11-23 新增 Fastly / AWS CloudFront / Google / Hetzner 四家海外厂商（单线程直连实测 3.7–17MB/s），「海外八源聚合」改为八家互不相干的供应商，降低单家抖动带来的整组波动",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -211,21 +211,84 @@
       "switchPolicy": "failover"
     },
     {
-      "id": "intl-multi",
-      "name": "海外六源聚合 ⭐",
+      "id": "intl-fastly",
+      "name": "Fastly · kernel.org",
       "downloadUrls": [
-        "https://speed.cloudflare.com/__down?during=download&bytes=99999999",
-        "https://proof.ovh.net/files/100Mb.dat",
-        "https://hnd-jp-ping.vultr.com/vultr.com.100MB.bin",
-        "https://sgp-ping.vultr.com/vultr.com.100MB.bin",
-        "https://nj-us-ping.vultr.com/vultr.com.100MB.bin",
-        "https://fra-de-ping.vultr.com/vultr.com.100MB.bin"
+        "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.tar.xz"
       ],
       "uploadUrls": [],
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "Cloudflare + OVH 法国 + Vultr 日/新/美/德，跨境最容易跑出峰值。Cachefly 与 Linode/Hetzner 测速文件 2026-11 复测分别拒连、域名不可解析，均已剔除。跨境吞吐受出口拥塞影响大，单条 0.1–15MB/s 都属正常。",
+      "desc": "133MB Linux 内核源码，走 Fastly 自有骨干（不是转售）。2026-11-23 单线程直连实测 6.8MB/s，支持 Range。文件带版本号，内核发新大版本后旧链接仍在，不会失效。",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-cloudfront",
+      "name": "AWS CloudFront · docker",
+      "downloadUrls": [
+        "https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "62MB docker 静态包，CloudFront 边缘分发。2026-11-23 单线程直连实测 5.8MB/s，支持 Range。CloudFront 按客户端 IP 调度，国内通常落在香港/新加坡/东京节点。",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-google",
+      "name": "Google CDN · golang",
+      "downloadUrls": [
+        "https://dl.google.com/go/go1.22.0.linux-amd64.tar.gz"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "66MB Go 发行包，Google 自有 CDN（dl.google.com，与 storage.googleapis.com 不同，国内可达）。2026-11-23 单线程直连实测 17MB/s，是这批新增源里最快的。",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-hetzner",
+      "name": "Hetzner 新加坡/美东 · 2源",
+      "downloadUrls": [
+        "https://sin-speed.hetzner.com/1GB.bin",
+        "https://ash-speed.hetzner.com/1GB.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "各 1GB，Hetzner 自有骨干的新加坡与阿什本节点。2026-11-23 单线程直连实测 3.7 / 4.2MB/s。1GB 单文件在千兆下能连续读 8 秒以上，重连频率远低于 100MB 档。",
+      "mode": "down",
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "intl-multi",
+      "name": "海外八源聚合 ⭐",
+      "downloadUrls": [
+        "https://speed.cloudflare.com/__down?during=download&bytes=99999999",
+        "https://proof.ovh.net/files/100Mb.dat",
+        "https://hnd-jp-ping.vultr.com/vultr.com.100MB.bin",
+        "https://sgp-ping.vultr.com/vultr.com.100MB.bin",
+        "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.tar.xz",
+        "https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz",
+        "https://dl.google.com/go/go1.22.0.linux-amd64.tar.gz",
+        "https://sin-speed.hetzner.com/1GB.bin"
+      ],
+      "uploadUrls": [],
+      "downloadEndpoints": [],
+      "uploadEndpoints": [],
+      "group": "国外",
+      "desc": "Cloudflare + OVH + Vultr 日/新 + Fastly + CloudFront + Google + Hetzner，八个互不相干的厂商。旧版「六源聚合」里 5 条是 Vultr，同一家抖动就会整组一起掉，这是「海外源不稳定」的主要来源。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"

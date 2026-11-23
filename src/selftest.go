@@ -166,7 +166,7 @@ func SelfTest(ctx context.Context, raw string) SiteTest {
 	req.Header.Set("Accept-Encoding", "identity")
 	req.Header.Set("User-Agent", browserUA)
 	t3 := time.Now()
-	resp, herr := newTransferClient(nil, "").Do(req)
+	resp, herr := newTransferClient(nil, "", "").Do(req)
 	httpLayer.Ms = msSince(t3)
 	if herr != nil {
 		httpLayer.Err = shortErr(herr)

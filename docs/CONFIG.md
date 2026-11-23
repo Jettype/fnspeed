@@ -104,6 +104,10 @@ fnspeed/
 - **并发是上限，不是起步值**：调度器只在这个数以内爬坡，填 4 就最多 4 条。
   填 0 或不填等于不限制，回落到内置上限 64
 - 默认值：并发 **64**（= 不限制）/ 时长 **60s** / 不限流量；改动即落盘（防抖 0.7s），重启保留
+- 同一份文件里还有两个「打哪儿」的开关，容易被忽略：
+  - `region`：定向测速位置（`gd-ct` 或海外城市 `intl-jp-tyo`），空串 = 就近
+  - `prefer`：线路偏好，`""` 就近 / `"overseas"` 海外优先（改用海外 DoH 解析，见 DESIGN §2）。
+    指定了 `region` 时 `prefer` 不生效
 - 接口：`GET/POST /api/settings`；`GET /api/profiles` 响应也附带当前值
 
 ## 4. 内置测速源
@@ -125,9 +129,18 @@ fnspeed/
 | 国外 | `intl-vultr-sg` | Vultr 新加坡 100MB | 东南亚出口 |
 | 国外 | `intl-vultr-us` | Vultr 新泽西 100MB | 美东回程 |
 | 国外 | `intl-vultr-de` | Vultr 法兰克福 100MB | 欧洲回程 |
-| 国外 | **`intl-multi`** | CF + OVH + Vultr×4 + Cachefly | ⭐ 跨境最容易跑出峰值 |
+| 国外 | `intl-fastly` | Fastly · kernel.org 133MB | Fastly 自有骨干，单线程实测 6.8MB/s |
+| 国外 | `intl-cloudfront` | AWS CloudFront · docker 62MB | CloudFront 边缘，实测 5.8MB/s |
+| 国外 | `intl-google` | Google CDN · golang 66MB | `dl.google.com`，实测 17MB/s |
+| 国外 | `intl-hetzner` | Hetzner 新加坡/美东 各 1GB | 1GB 单文件，重连频率低，实测 3.7/4.2MB/s |
+| 国外 | **`intl-multi`** | 八家厂商各一条 | ⭐ CF + OVH + Vultr×2 + Fastly + CloudFront + Google + Hetzner |
 | 上传 | `up-cf` | `speed.cloudflare.com/__up` | 公共可写端点，无需自建接收端 |
 | 上传 | `up-sink` | `127.0.0.1:8977/up` | 改成 NAS 局域网 IP，或用云端 sink |
+
+> 1.6.1 之前「海外六源聚合」里 5 条是 Vultr、另有 17 条 DataPacket 镜像 —— 同一家抖动
+> 整组跟着抖，才是「海外源不稳定」的主因。现在按厂商拆分，一家掉线不牵连其余。
+> 另外 `speedtest.*.linode.com`、`*.digitalocean.com` 这类经典测速域名在国内多数解析不出来，
+> 不要凭印象往里加。
 
 > 1.5.2 起国内源只留「软件厂商自有 CDN 上的大安装包」。高校与云厂商镜像站对本应用
 > 几乎全线不可用：华为云 418 风控、清华/中科大/北外/上交 403、南大重定向死循环、

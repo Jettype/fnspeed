@@ -27,17 +27,25 @@ import (
 )
 
 const (
-	maxConcurrency   = 64
-	initialStreams   = 4  // 爬坡起点
-	rampStep         = 2  // 每轮新增
-	rampWindow       = 10 // 秒，超过则锁定并发
-	maxDurationSec   = 24 * 3600
-	chunkSize        = 32 << 20 // Range 分片 32MB
-	shortFileBytes   = 32 << 20 // 小于这个大小算小文件，爬坡时不给它加流
-	readBufSize      = 256 << 10
-	maxFailBeforeRot = 3
-	uploadBodyLen    = int64(8) << 30
-	browserUA        = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+	maxConcurrency = 64
+	// initialStreams 是爬坡起点。
+	//
+	// 从 4 提到 8：跨境源的单流受 BDP 限制，4 条流在 200ms RTT 上通常只跑到
+	// 30% 左右，用户看到的就是「速度慢慢往上爬」。起点翻倍后，同样的 4 秒观察窗
+	// 能直接看到真实水位，爬坡轮次从 10 轮以上压到 4 轮以内。
+	initialStreams = 8
+	// intlInitialStreams 是「海外优先」时的起点：跨境 BDP 更大，需要更多并行流
+	// 才能先把链路填满，再由调度器按拐点收敛。
+	intlInitialStreams = 12
+	rampStep           = 2  // 每轮新增（小并发时的下限）
+	rampWindow         = 10 // 秒，超过则锁定并发
+	maxDurationSec     = 24 * 3600
+	chunkSize          = 32 << 20 // Range 分片 32MB
+	shortFileBytes     = 32 << 20 // 小于这个大小算小文件，爬坡时不给它加流
+	readBufSize        = 256 << 10
+	maxFailBeforeRot   = 3
+	uploadBodyLen      = int64(8) << 30
+	browserUA          = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
 		"(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
@@ -226,7 +234,10 @@ type Engine struct {
 	sched  *scheduler
 
 	// 定向测速：region 为空表示就近（跟随本机 DNS 调度）。
-	region   string
+	region string
+	// prefer 是线路偏好："overseas" 表示不使用 ECS，改由海外 DoH 解析，
+	// 让 CDN 把「海外解析器」当成客户端来源，从而交出海外节点。
+	prefer   string
 	resolver *pinResolver
 
 	stopOnce sync.Once
@@ -259,11 +270,8 @@ func NewEngine(p *Profile, st *Stats, region string) *Engine {
 		profile: p, stats: st, ctx: ctx, cancel: cancel,
 		streams: make(map[int]*stream),
 		res:     NewResSampler(),
-		region:  region,
 	}
-	if region != "" {
-		e.resolver = NewPinResolver()
-	}
+	e.SetPinMode(region, "")
 	// 并发上限：0 或越界都回落到编译期上限，其余按用户填的执行。
 	ms := maxConcurrency
 	if p != nil && p.Concurrency > 0 && p.Concurrency < maxConcurrency {
@@ -272,6 +280,19 @@ func NewEngine(p *Profile, st *Stats, region string) *Engine {
 	e.maxStreams = int32(ms)
 	e.phase.Store("ramp")
 	return e
+}
+
+// SetPinMode 设定「测速位置」与「线路偏好」。
+//
+// 两者互斥但不冲突：给了 region 就按 ECS 定点（哪儿都能指，含海外城市）；
+// 只给 prefer=overseas 就不带 ECS，改用海外 DoH 解析，让 CDN 依解析器位置
+// 返回海外节点。任何一项非空都要建解析器。
+func (e *Engine) SetPinMode(region, prefer string) {
+	e.region = region
+	e.prefer = prefer
+	if (region != "" || prefer != "") && e.resolver == nil {
+		e.resolver = NewPinResolver()
+	}
 }
 
 // Prepare 并发预检所有端点，按结果填入 Mode/Status。
@@ -352,7 +373,15 @@ func (e *Engine) pinEndpoint(st *URLState) {
 	if region == "" {
 		region = e.region
 	}
-	if region == "" || e.resolver == nil {
+	if region == "" {
+		// 没指定具体城市时，「海外优先」仍然要解析一次：不带 ECS，
+		// 交给海外 DoH，让 CDN 按解析器所在位置给海外节点。
+		if e.prefer == "overseas" {
+			e.pinOverseas(st)
+		}
+		return
+	}
+	if e.resolver == nil {
 		return
 	}
 	u, err := url.Parse(st.EP.URL)
@@ -378,6 +407,31 @@ func (e *Engine) pinEndpoint(st *URLState) {
 	st.pin.Store(&pinInfo{ip: ip, region: label})
 }
 
+// pinOverseas 是「海外优先」的解析路径：不带 ECS，用海外公共 DNS。
+func (e *Engine) pinOverseas(st *URLState) {
+	if e.resolver == nil {
+		return
+	}
+	u, err := url.Parse(st.EP.URL)
+	if err != nil || u.Hostname() == "" {
+		return
+	}
+	host := u.Hostname()
+	if net.ParseIP(host) != nil {
+		st.pin.Store(&pinInfo{region: "海外优先", warn: "该源直接写死 IP，没有可调度的节点"})
+		return
+	}
+	if isLocalHost(host) {
+		return // 内网目标没有 CDN 可言，别去外网解析
+	}
+	ip, via, err := e.resolver.ResolveOverseas(e.ctx, host)
+	if err != nil {
+		st.pin.Store(&pinInfo{region: "海外优先", warn: "海外解析失败（本机 DNS 仍可用），已回落就近"})
+		return
+	}
+	st.pin.Store(&pinInfo{ip: ip, region: "海外优先 · " + via})
+}
+
 // Start 起初始流（默认 4 条，上限更低时按上限），并启动调度器、探针与资源采样。
 func (e *Engine) Start() int {
 	e.stats.Running.Store(true)
@@ -394,6 +448,11 @@ func (e *Engine) Start() int {
 	}
 	// 起始流数不越过上限：把并发填成 2，开局就只该有 2 条。
 	start := initialStreams
+	// 海外优先 / 定向到海外城市时，BDP 大得多：8 条流在 200ms RTT 上
+	// 只够撑起六七百兆，先起 12 条再让调度器按拐点收敛。
+	if e.prefer == "overseas" || IsOverseasRegion(e.region) {
+		start = intlInitialStreams
+	}
 	if e.MaxStreams() < start {
 		start = e.MaxStreams()
 	}
@@ -863,16 +922,17 @@ func (e *Engine) runStream(s *stream) {
 // ---------------- 下载 ----------------
 
 func (e *Engine) downloadLoop(s *stream) {
-	// 定向模式下把解析器交给 client：302 换域名时要能按同一个位置重新解析。
+	// 定向 / 海外优先模式下把解析器交给 client：302 换域名时要能按同一个策略
+	// 重新解析（跨境的 latest 入口经常两跳跨三个域名）。
 	region := s.st.EP.PinRegion
 	if region == "" {
 		region = e.region
 	}
 	var resolve *pinResolver
-	if e.resolver != nil && region != "" {
+	if e.resolver != nil && (region != "" || e.prefer != "") {
 		resolve = e.resolver
 	}
-	client := newTransferClient(resolve, region)
+	client := newTransferClient(resolve, region, e.prefer)
 	buf := make([]byte, readBufSize)
 	backoff := 200 * time.Millisecond
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(s.id)))
@@ -1304,7 +1364,7 @@ func newDialer() *net.Dialer {
 	}
 }
 
-func newTransferClient(resolve *pinResolver, region string) *http.Client {
+func newTransferClient(resolve *pinResolver, region, prefer string) *http.Client {
 	d := newDialer()
 	tr := &http.Transport{
 		// 定向测速：上下文里带 pinIP 就把地址换成它，端口沿用原值。
@@ -1341,12 +1401,22 @@ func newTransferClient(resolve *pinResolver, region string) *http.Client {
 					return fmt.Errorf("重定向死循环（%s 反复跳回同一地址）", req.URL.Host)
 				}
 			}
-			// 定向模式下 302 换了域名：旧 IP 对新域名没有意义，得按同一个位置
+			// 定向模式下 302 换了域名：旧 IP 对新域名没有意义，得按同一个策略
 			// 重新解析一次。游戏厂的 latest 入口就是两跳跨三个域名。
-			if resolve != nil && region != "" {
+			if resolve != nil {
 				host := req.URL.Hostname()
 				if p := pinFrom(req.Context()); p == nil || p.host != host {
-					if ip, err := resolve.Resolve(req.Context(), host, region); err == nil {
+					var (
+						ip  string
+						err error
+					)
+					switch {
+					case region != "":
+						ip, err = resolve.Resolve(req.Context(), host, region)
+					case prefer == "overseas":
+						ip, _, err = resolve.ResolveOverseas(req.Context(), host)
+					}
+					if err == nil && ip != "" {
 						*req = *req.WithContext(withPinIP(req.Context(), host, ip))
 					}
 				}
@@ -1357,7 +1427,7 @@ func newTransferClient(resolve *pinResolver, region string) *http.Client {
 }
 
 func newProbeClient() *http.Client {
-	c := newTransferClient(nil, "")
+	c := newTransferClient(nil, "", "")
 	c.Timeout = probeTimeout
 	return c
 }

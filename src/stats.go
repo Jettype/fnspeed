@@ -9,13 +9,35 @@ import (
 	"time"
 )
 
-const slowStartSec = 3.0 // 慢启动隔离窗口：前 3 秒不计入平均与稳定值
+const (
+	slowStartSec = 3.0 // 慢启动隔离窗口：前 3 秒不计入平均与稳定值
+
+	// rateWindowMs 是瞬时速率的滑动窗口（1 秒）。
+	//
+	// 1.6.0 及以前用的是「相邻两点差分」，窗口等于 Tick 间隔（500ms）。
+	// 只要某次 Tick 被调度推迟、或者 TCP 在停顿后成批补发，单个区间里
+	// 就会聚进上亿字节：190MB / 0.5s = 3 Gbps —— 链路明明只有 1 Gbps。
+	// 这个假尖峰还有两个连带伤害：写进峰值（PeakRecv）、成为曲线 Y 轴上限
+	// （整条曲线被压成一条平线，看起来像"卡住了不刷新"）。
+	// 换成 1 秒窗口后，同一段突发被摊到 1 秒上，误差上限降到 1/2 左右，
+	// 而响应延迟只增加半帧。
+	rateWindowMs = 1000
+
+	// windowSamples 是一次窗口差分最多回看的样本数（500ms 一个点，覆盖 4 秒）。
+	windowSamples = 8
+)
 
 // Sample 是一次采样点。Recv/Sent 是累计字节数，速率由相邻两点差分得出。
+//
+// RR/RS 是服务端算好的瞬时速率（B/s，1 秒滑动窗口）。前端不再自己差分：
+// 前后端各算一遍必然对不上，而历史版本里前端那套「相邻两点差分」正是
+// 3 Gbps 假数字的另一个来源（时间戳量化到毫秒，1ms 内进 500KB 就是 4 Gbps）。
 type Sample struct {
 	T    int64 `json:"t"`
 	Recv int64 `json:"r"`
 	Sent int64 `json:"s"`
+	RR   int64 `json:"rr,omitempty"`
+	RS   int64 `json:"rs,omitempty"`
 }
 
 // Ring 是固定容量的环形缓冲，满了覆盖最旧的点。
@@ -112,10 +134,11 @@ type Stats struct {
 	ringMu sync.RWMutex
 	ring   *Ring
 
-	mu      sync.Mutex
-	lastAt  time.Time
-	lastRec int64
-	lastSen int64
+	// tickMu 串行化 Tick。
+	// 每局有一个 500ms 的 ticker，而 Wait() 收尾时还会补一次 Tick：
+	// 两次若撞在一起，第二次的 dt 只有几毫秒，差值却是一整个窗口的字节，
+	// 商出来就是天文数字（并且会写进峰值）。串行化之后这种"假尖峰"从源头消失。
+	tickMu sync.Mutex
 
 	// Tick 算出来的瞬时速率。Snapshot 直接读这两个值，
 	// 不再自己拿 lastRec 重算 —— SSE 每 500ms 推一帧，几乎总是紧跟在
@@ -177,53 +200,80 @@ func (s *Stats) Reset() {
 	s.avgFinal.Store(false)
 	s.recvFinal.Store(0)
 	s.sentFinal.Store(0)
-	s.mu.Lock()
-	s.lastAt = time.Time{}
-	s.lastRec = 0
-	s.lastSen = 0
+	s.tickMu.Lock()
 	s.lastRR.Store(0)
 	s.lastRS.Store(0)
-	s.mu.Unlock()
+	s.tickMu.Unlock()
 }
 
-func (s *Stats) Tick() {
-	now := time.Now()
-	rec := s.RecvBytes.Load()
-	sen := s.SentBytes.Load()
-
+// ringRef 取当前环形缓冲。Reset 会整体换掉它，读侧必须走这个入口。
+func (s *Stats) ringRef() *Ring {
 	s.ringMu.RLock()
 	rd := s.ring
 	s.ringMu.RUnlock()
-	rd.Push(Sample{T: now.UnixMilli(), Recv: rec, Sent: sen})
+	return rd
+}
 
-	s.mu.Lock()
-	if !s.lastAt.IsZero() {
-		dt := now.Sub(s.lastAt).Seconds()
-		if dt > 0 {
-			rr := int64(float64(rec-s.lastRec) / dt)
-			rs := int64(float64(sen-s.lastSen) / dt)
-			// 换局瞬间计数器被 Reset 归零，而上一局的 Tick 可能还在跑：
-			// 差值会变成负数，直接显示就是「-1829000000 bps」。
-			if rr < 0 {
-				rr = 0
-			}
-			if rs < 0 {
-				rs = 0
-			}
-			s.lastRR.Store(rr)
-			s.lastRS.Store(rs)
-			if rr > s.peakRecv.Load() {
-				s.peakRecv.Store(rr)
-			}
-			if rs > s.peakSent.Load() {
-				s.peakSent.Store(rs)
-			}
-		}
+// windowRate 用「当前点 vs 1 秒前那个点」算瞬时速率。
+//
+// 样本不足 1 秒时退化成「当前点 vs 最旧的点」—— 开局那一两帧就是这样，
+// 此时的数本来不可信，但也不能恒为 0（否则界面会挂着 0 bps）。
+// 样本按「旧 → 新」排列，取最接近 1 秒前的那个点：Tick 被漏掉时
+// dt 会自然变长（最多 4 秒），得到的是一段更长的平均，仍远好于单区间峰值。
+func windowRate(samples []Sample, t, rec, sen int64) (rr, rs int64, ok bool) {
+	if len(samples) == 0 {
+		return 0, 0, false
 	}
-	s.lastAt = now
-	s.lastRec = rec
-	s.lastSen = sen
-	s.mu.Unlock()
+	base := samples[0]
+	for _, s := range samples {
+		if t-s.T < rateWindowMs {
+			break
+		}
+		base = s
+	}
+	dt := float64(t-base.T) / 1000
+	if dt <= 0 {
+		return 0, 0, false
+	}
+	rr = int64(float64(rec-base.Recv) / dt)
+	rs = int64(float64(sen-base.Sent) / dt)
+	if rr < 0 {
+		rr = 0 // 换局瞬间计数器归零，差值会是负数
+	}
+	if rs < 0 {
+		rs = 0
+	}
+	return rr, rs, true
+}
+
+func (s *Stats) Tick() {
+	s.tickMu.Lock()
+	defer s.tickMu.Unlock()
+
+	now := time.Now()
+	rec := s.RecvBytes.Load()
+	sen := s.SentBytes.Load()
+	t := now.UnixMilli()
+
+	rd := s.ringRef()
+	if rd == nil {
+		return
+	}
+	// 先算速率，再带上速率入环：曲线和主读数从此只有一个来源。
+	rr, rs, ok := windowRate(rd.Snapshot(windowSamples), t, rec, sen)
+	rd.Push(Sample{T: t, Recv: rec, Sent: sen, RR: rr, RS: rs})
+	if !ok {
+		return
+	}
+
+	s.lastRR.Store(rr)
+	s.lastRS.Store(rs)
+	if rr > s.peakRecv.Load() {
+		s.peakRecv.Store(rr)
+	}
+	if rs > s.peakSent.Load() {
+		s.peakSent.Store(rs)
+	}
 
 	if s.Running.Load() && !s.finalized.Load() {
 		s.refreshSteady()
@@ -233,10 +283,7 @@ func (s *Stats) Tick() {
 // refreshSteady 运行中实时刷新稳定值：丢弃前 3 秒与后 10%，取中位数。
 // 每 500ms 一次、最多 600 个样本，开销可忽略。
 func (s *Stats) refreshSteady() {
-	s.ringMu.RLock()
-	rd := s.ring
-	s.ringMu.RUnlock()
-	samples := rd.Snapshot(600)
+	samples := s.ringRef().Snapshot(600)
 	if len(samples) < 4 {
 		return
 	}
@@ -335,7 +382,10 @@ type Snapshot struct {
 	URLStates     []URLOut     `json:"urlStates"`
 	Ping          PingSnapshot `json:"ping"`
 	Res           ResStat      `json:"res"`
-	Verdict       Verdict      `json:"verdict"`
+	// Latency 是把 RTT / 抖动 / 丢包折进吞吐解释后的派生指标，
+	// 由 deriveLatency 在快照出口处填，不参与字节统计本身。
+	Latency Latency `json:"latency"`
+	Verdict Verdict `json:"verdict"`
 }
 
 type URLOut struct {

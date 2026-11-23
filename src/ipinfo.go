@@ -395,7 +395,7 @@ func ProbeHit(ctx context.Context, raw string) HitInfo {
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Accept-Encoding", "identity")
 
-	client := newTransferClient(nil, "")
+	client := newTransferClient(nil, "", "")
 	defer client.CloseIdleConnections()
 	resp, err := client.Do(req)
 	h.Ms = float64(time.Since(t0).Microseconds()) / 1000
@@ -427,6 +427,14 @@ func cdnOf(host string, hdr http.Header) (cdn, colo string) {
 	}
 	if hdr.Get("X-Amz-Cf-Id") != "" {
 		return "AWS CloudFront", ""
+	}
+	// Fastly 的边缘会回 x-served-by: cache-xxx / cache-hhn-xxx，
+	// 这个头比 Server 更可靠（后端常见 Apache/nginx，看不出是谁在分发）。
+	if sb := hdr.Get("X-Served-By"); strings.HasPrefix(strings.ToLower(sb), "cache-") {
+		return "Fastly", ""
+	}
+	if hdr.Get("X-Fastly-Request-Id") != "" {
+		return "Fastly", ""
 	}
 
 	server := strings.ToLower(hdr.Get("Server"))
@@ -461,6 +469,9 @@ func cdnOf(host string, hdr http.Header) (cdn, colo string) {
 		{".ovh.us", "OVH"},
 		{"datapacket.com", "CDN77"},
 		{"cloudfront.net", "AWS CloudFront"},
+		{"docker.com", "AWS CloudFront"},
+		{"kernel.org", "Fastly"},
+		{"dl.google.com", "Google"},
 		{"dnsv1.com", "腾讯云 CDN"},
 		{"alicdn.com", "阿里云 CDN"},
 		{"aliyun.com", "阿里云"},

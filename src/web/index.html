@@ -241,7 +241,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .bar{height:3px;background:var(--bar-bg);margin-top:7px;overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:var(--amber);transition:width .3s}
 .bar i.warn{background:var(--warn)} .bar i.bad{background:var(--bad)}
-@media(min-width:1024px){.grid4{grid-template-columns:repeat(6,1fr)}}
+@media(min-width:1024px){.grid4{grid-template-columns:repeat(7,1fr)}}
 @media(min-width:1024px){
   .grid5>div{text-align:left;padding:9px 14px 10px}
   .grid5 b{font-size:15px}
@@ -467,6 +467,7 @@ body.show-mbar .mbar{opacity:1;visibility:visible;transform:none}
         <div class="pcell"><div class="k">丢包</div><div class="v num" id="gLoss">—</div><div class="s">探测样本</div></div>
         <div class="pcell"><div class="k">CPU</div><div class="v num" id="cpu">—</div><div class="bar"><i id="cpuBar"></i></div></div>
         <div class="pcell"><div class="k">内存</div><div class="v num" id="mem">—</div><div class="bar"><i id="memBar"></i></div></div>
+        <div class="pcell"><div class="k">单流 BDP</div><div class="v num" id="gBdp">—</div><div class="s" id="gBdpSub">每流所需在途</div></div>
       </div>
     </section>
 
@@ -551,7 +552,14 @@ body.show-mbar .mbar{opacity:1;visibility:visible;transform:none}
       <select id="region" title="选定后用 ECS 让 CDN 交出该地节点，再强制拨号过去">
         <option value="">就近（自动，跟随本机 DNS）</option>
       </select>
-      <div class="hint" id="regionHint">指定省份与运营商后，本机改从该地节点取数据 —— 用来测跨地区、跨运营商的真实速度。</div>
+      <div class="hint" id="regionHint">指定省份与运营商后，本机改从该地节点取数据 —— 用来测跨地区、跨运营商的真实速度。海外城市同样可选。</div>
+
+      <label class="lbl">线路偏好</label>
+      <div class="seg" id="prefer">
+        <button data-v="" aria-pressed="true">就近</button>
+        <button data-v="overseas" aria-pressed="false">海外优先</button>
+      </div>
+      <div class="hint" id="preferHint">海外优先：不带 ECS，改用海外公共 DNS 解析，让 CDN 交出海外边缘节点。上方已指定具体位置时，以位置为准。</div>
 
       <label class="auth">
         <input type="checkbox" id="auth">
@@ -704,13 +712,25 @@ async function del(url, body){
 }
 
 /* ---------------- 曲线 ---------------- */
-const CH = { cv:$("chart"), pts:[], hover:-1 };
+const CH = { cv:$("chart"), pts:[], hover:-1, scaleD:0, scaleU:0 };
+// toRates 直接取服务端算好的窗口速率（rr/rs）。
+//
+// 旧实现是前端拿相邻两点的累计字节自己差分：时间戳是毫秒整数，
+// 两次采样只要挤进 1ms，500KB 的突发就会被算成 4 Gbps，然后这个点还会
+// 被当成 Y 轴上限，把整条曲线压成一条平线。前后端各算一遍必然对不上，
+// 现在只有一个口径：后端 1 秒滑动窗口。
+// 没有 rr/rs 的旧数据（升级瞬间的缓存帧）退化为差分，但跳过 dt<200ms 的样本。
 function toRates(series){
   const out=[];
   for(let i=1;i<series.length;i++){
-    const dt=(series[i].t-series[i-1].t)/1000;
-    if(dt<=0) continue;
-    out.push({ r:Math.max(0,(series[i].r-series[i-1].r)/dt), s:Math.max(0,(series[i].s-series[i-1].s)/dt) });
+    const a=series[i-1], b=series[i];
+    if(typeof b.rr==="number" || typeof b.rs==="number"){
+      out.push({ r:b.rr||0, s:b.rs||0 });
+      continue;
+    }
+    const dt=(b.t-a.t)/1000;
+    if(dt<0.2) continue;
+    out.push({ r:Math.max(0,(b.r-a.r)/dt), s:Math.max(0,(b.s-a.s)/dt) });
   }
   return out;
 }
@@ -735,12 +755,21 @@ function draw(){
   if(w<=0||h<=0) return;
 
   const view=CH.pts.slice(-120);
-  let maxD=0, maxU=0;
-  for(const p of view){ maxD=Math.max(maxD,p.r); maxU=Math.max(maxU,p.s); }
+  // Y 轴上限：跟得上突增（立刻抬），但只在持续回落时才缓慢下移（每帧 3%）。
+  // 早先直接取这 120 点的最大值，一个假尖峰就能把曲线压成一条平线 ——
+  // 用户看到的就是「曲线不刷新了」，其实数据一直在进，只是纵向分辨率被一个点吃了。
+  let peakD=0, peakU=0;
+  const recent=view.slice(-40);            // 近 20 秒，代表"当前水位"
+  for(const p of recent){ peakD=Math.max(peakD,p.r); peakU=Math.max(peakU,p.s); }
+  CH.scaleD = peakD>=CH.scaleD? peakD : Math.max(peakD, CH.scaleD*0.97);
+  CH.scaleU = peakU>=CH.scaleU? peakU : Math.max(peakU, CH.scaleU*0.97);
+  let maxD=CH.scaleD, maxU=CH.scaleU;
   const empty = maxD<=0 && maxU<=0;
-  if(maxD<=0) maxD=1e6;
-  if(maxU<=0) maxU=maxD;
-  maxD*=1.12; maxU*=1.12;
+  if(!empty){
+    if(maxD<=0) maxD=maxU;
+    if(maxU<=0) maxU=maxD;
+    maxD*=1.12; maxU*=1.12;
+  }
 
   // 网格：只留极淡的三条水平线，不给纵向网格和多余文字
   c.lineWidth=1;
@@ -818,10 +847,20 @@ window.addEventListener("resize", draw);
 /* ---------------- 渲染 ---------------- */
 let GS = {concurrency:64, durationSec:60, showIp:true, showHit:false, region:""};
 let lastRate=0, lastRateAt=0;
+let rateHist=[];      // 最近三帧速率，取中位数平滑
 let lastMainUp=false; // 上一帧主读数用的方向；切换时清掉兜底值，免得带着旧方向的读数
 let lastFrame=null;   // 最近一帧快照：命中探测回来后用它重绘
 let HITS={};          // url -> HitInfo，只在内存里，刷新即丢
 let hitBusy=false;
+
+// smoothRate 取最近三帧的中位数。单帧归零（SSE 落在窗口缝里）和单帧尖峰
+// （一次补发被算进窗口）都不会再传到界面上，代价只有一帧延迟。
+function smoothRate(v){
+  rateHist.push(v);
+  if(rateHist.length>3) rateHist.shift();
+  const s=rateHist.slice().sort((a,b)=>a-b);
+  return s[(s.length-1)>>1];
+}
 
 function render(d){
   const phase = d.phase||"idle";
@@ -837,24 +876,25 @@ function render(d){
   // 免得把上传请求的响应头那几 KB 当成「其实在下载」而把主读数抖成下行。
   let mainUp = mode==="up";
   if(mainUp && sentTotal===0 && recvTotal>(4<<20)) mainUp=false;
-  if(mainUp!==lastMainUp){ lastRate=0; lastRateAt=0; lastMainUp=mainUp; }
+  if(mainUp!==lastMainUp){ lastRate=0; lastRateAt=0; rateHist=[]; lastMainUp=mainUp; }
 
   // SSE 每 500ms 一帧，速率是按秒窗口算的，偶尔会有一帧落在窗口缝里变成 0。
   // 直接显示会看到数字闪 0 —— 上一帧的值最多保留 1.6 秒兜一下。
   // 跑完之后不再归零：定格成本次平均，否则大号显示 0 而下面「平均」格有数，
   // 用户会以为是 bug。
-  const nowMs=Date.now();
+  // SSE 每 500ms 一帧。旧实现是「取到 0 就沿用上一帧，最多兜 1.6 秒」——
+  // 兜底期间读数完全是假的，而且上升沿会被硬生生拖慢 1.6 秒。
+  // 改成三帧中位数：单帧掉 0 与单帧尖峰都被吸收，延迟只有一帧（500ms）。
   const mainTotal = mainUp? sentTotal : recvTotal;
   let rv = (mainUp? d.sentRate : d.recvRate)||0;
   if(d.running){
-    if(rv>0){ lastRate=rv; lastRateAt=nowMs; }
-    else if(nowMs-lastRateAt<1600){ rv=lastRate; }
-    else { lastRate=0; }
+    rv = smoothRate(rv);
+    lastRate=rv; lastRateAt=Date.now();
   }else if(mainTotal>0){
     rv = (mainUp? d.avgSent : d.avgRecv)||0;
-    lastRate=rv;
+    lastRate=rv; rateHist=[];
   }else{
-    lastRate=0;
+    lastRate=0; rateHist=[];
   }
   const frozen = !d.running && mainTotal>0;
   $("heroAvgTag").hidden = !frozen;
@@ -920,6 +960,15 @@ function render(d){
   const setBar=(el,v)=>{ el.style.width=Math.min(100,v)+"%";
     el.className = v>=85?"bad":v>=60?"warn":""; };
   setBar($("cpuBar"),cpu); setBar($("memBar"),mem);
+
+  // 单流 BDP：维持当前每流速率需要的在途字节 = 每流速率 × RTT。
+  // 它和内核允许的单连接窗口一对比，就能分出「目标端限速」和「跨境 RTT 太高」：
+  // 后者加并发立刻见效，加时长毫无意义。
+  const lt=d.latency||{};
+  $("gBdp").textContent = lt.perStreamKb>0 ? fmt.bytes(lt.perStreamKb*1024) : "—";
+  $("gBdpSub").textContent = lt.bound==="rtt"
+    ? "窗口受限 · 加并发"
+    : (lt.windowKb>0 ? "上限 "+fmt.bytes(lt.windowKb*1024) : "每流所需在途");
   $("probeTag").textContent = d.running? `并发 ${d.concurrency||0} · ${fmt.bytes((d.recvTotal||0)+(d.sentTotal||0))}` : (res.goroutines? `goroutine ${res.goroutines}`:"—");
 
   // 结论
@@ -976,7 +1025,9 @@ function pinLine(u){
   // 两个都摆出来，用户一眼能看出「到底落在哪」。
   const via = (u.remoteIp && u.pinIp && u.remoteIp!==u.pinIp)
     ? ` <span class="hop">→ ${esc(u.remoteIp)}</span>` : "";
-  return `<div class="pin">◎ 定向 ${esc(region)}${u.pinIp?` · <b>${esc(u.pinIp)}</b>`:""}${via}</div>`;
+  // 「海外优先」不是指定了某个地方，而是换了条解析路径，用「线路」更准确。
+  const kw = region.indexOf("海外优先")===0 ? "线路" : "定向";
+  return `<div class="pin">◎ ${kw} ${esc(region)}${u.pinIp?` · <b>${esc(u.pinIp)}</b>`:""}${via}</div>`;
 }
 
 // hitLine 生成端点下面那行「IP · CDN」。
@@ -1070,6 +1121,19 @@ window.addEventListener("pageshow", refreshNow);
 
 /* ---------------- 参数 ---------------- */
 let mode="both";
+let PRE="";            // 线路偏好："" 就近 / "overseas" 海外优先
+function setPrefer(v){
+  PRE = (v==="overseas")? "overseas" : "";
+  const box=$("prefer");
+  if(box) [...box.children].forEach(x=>x.setAttribute("aria-pressed", (x.dataset.v||"")===PRE));
+}
+if($("prefer")){
+  $("prefer").addEventListener("click", e=>{
+    const b=e.target.closest("button[data-v]"); if(!b) return;
+    setPrefer(b.dataset.v);
+    autosaveSettings(0);
+  });
+}
 function setMode(v){
   mode=v;
   [...$("mode").children].forEach(x=>x.setAttribute("aria-pressed", x.dataset.v===mode));
@@ -1094,8 +1158,11 @@ async function startTest(){
   try{
     clearTimeout(saveTimer);
     await flushSave();
+    // 全局参数也要落盘后再开始：否则「刚切到海外优先就点开始」会用上一份设置
+    // （保存是 700ms 防抖，手快就会撞上）。
+    await saveSettings();
     await post(API.start, { authorized:true, downloadUrls:dl, uploadUrls:ul, mode });
-    CH.pts=[]; draw();
+    CH.pts=[]; CH.scaleD=0; CH.scaleU=0; rateHist=[]; draw();
     setTimeout(loadIPInfo, 400);          // 顺手刷一次命中 IP，不阻塞开始
   }catch(e){ flash(e.message, true); }
 }
@@ -1527,6 +1594,7 @@ async function saveSettings(){
       showIp:!!GS.showIp,
       showHit:!!GS.showHit,
       region:$("region")? $("region").value : "",
+      prefer:PRE,
       cloudEndpoint:($("cloudUrl") && $("cloudUrl").value.trim()) || GS.cloudEndpoint || "",
       cloudDisabled:!!GS.cloudDisabled
     });
@@ -1537,6 +1605,7 @@ async function saveSettings(){
       $("limit").value=r.settings.bytesLimit? (r.settings.bytesLimit/1073741824):"";
       $("showIP").checked=!!r.settings.showIp;
       if($("region")) $("region").value=r.settings.region||"";
+      setPrefer(r.settings.prefer||"");
       syncPinTag();
       syncHitToggle();
       $("heroTotal").textContent=fmt.dur(r.settings.durationSec);
@@ -1559,7 +1628,7 @@ async function loadRegions(){
     const sel=$("region");
     if(sel){
       sel.innerHTML='<option value="">就近（自动，跟随本机 DNS）</option>'+
-        REGIONS.map(g=>'<optgroup label="'+esc(g.prov)+'">'+
+        REGIONS.map(g=>'<optgroup label="'+esc(g.overseas? "海外 · "+g.prov : g.prov)+'">'+
           g.items.map(it=>'<option value="'+esc(it.id)+'">'+esc(g.prov)+' · '+esc(it.isp)+'</option>').join("")+
         '</optgroup>').join("");
       sel.value=r.current||"";
@@ -1571,7 +1640,16 @@ function syncPinTag(){
   const el=$("pinTag"); if(!el) return;
   const sel=$("region");
   const id=sel? sel.value : (GS.region||"");
-  if(!id){ el.hidden=true; el.innerHTML=""; return; }
+  if(!id){
+    // 没指定城市，但选了「海外优先」：顶栏也要说出来，
+    // 否则用户会以为自己测的是"就近"，实际走的是海外解析。
+    if(PRE==="overseas"){
+      el.hidden=false;
+      el.innerHTML='<i></i>线路 · <b>海外优先</b>';
+      return;
+    }
+    el.hidden=true; el.innerHTML=""; return;
+  }
   const txt=(sel && sel.selectedOptions[0])? sel.selectedOptions[0].textContent : id;
   el.hidden=false;
   el.innerHTML='<i></i>测速位置 · <b>'+esc(txt)+'</b>';
@@ -1694,6 +1772,7 @@ fetch(API.profiles).then(r=>r.json()).then(j=>{
     $("limit").value=GS.bytesLimit? (GS.bytesLimit/1073741824):"";
     $("showIP").checked=!!GS.showIp;
     if($("region")) $("region").value=GS.region||"";
+    setPrefer(GS.prefer||"");
     syncPinTag();
     syncHitToggle();
     $("heroTotal").textContent=fmt.dur(GS.durationSec);

@@ -46,7 +46,7 @@ import (
 
 // appVersion 由 build.sh 用 -ldflags "-X main.appVersion=$VER" 注入，
 // 保证二进制自检的版本号与 manifest 永远一致。
-var appVersion = "1.6.0"
+var appVersion = "1.6.1"
 
 const (
 	// cloudFormat 是远端清单的 format 标识，写错一个字整份拒绝。

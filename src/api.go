@@ -241,6 +241,10 @@ func (a *App) snapshot(limit int) Snapshot {
 		snap.Ping = lastPing
 		snap.Res = lastRes
 	}
+	// 延迟派生指标必须在 Ping 填好之后算：它要用 RTT 把吞吐换算成 BDP。
+	// 放在这里而不是 Stats 里，是为了让 Stats 保持纯粹的字节计数，
+	// 派生量可以随口径调整而重算。
+	snap.Latency = deriveLatency(&snap)
 	snap.Verdict = Judge(snap)
 	return snap
 }
@@ -363,7 +367,13 @@ func (a *App) handleStart(w http.ResponseWriter, r *http.Request) {
 	a.stats.Running.Store(true)
 	a.stats.SetPhase("ramp")
 	a.stats.SetStartAt(time.Now())
-	eng := NewEngine(p, a.stats, a.settings.Get().Region)
+	gs := a.settings.Get()
+	eng := NewEngine(p, a.stats, gs.Region)
+	// 定向位置与线路偏好一起下发：两者都影响「解析成哪个节点」。
+	// 明确指定了城市就不再叠加"海外优先"，否则会互相覆盖。
+	if gs.Region == "" {
+		eng.SetPinMode("", gs.Prefer)
+	}
 
 	a.mu.Lock()
 	a.engine = eng
@@ -380,17 +390,24 @@ func (a *App) handleStart(w http.ResponseWriter, r *http.Request) {
 			eng.Stop("没有可运行的流")
 		}
 		tick := time.NewTicker(500 * time.Millisecond)
-		defer tick.Stop()
+		// 采样协程跟着引擎的 ctx 走，而不是「等下一次 Tick 时发现 Running 变了」。
+		// 老写法用 `for range tick.C`：Wait 里 tick.Stop() 不会关闭通道，
+		// 协程会永久阻塞在 receive 上 —— 每跑一局泄漏一个 goroutine。
 		go func() {
-			for range tick.C {
-				if !a.stats.Running.Load() {
+			defer tick.Stop()
+			for {
+				select {
+				case <-eng.ctx.Done():
 					return
+				case <-tick.C:
+					if !a.stats.Running.Load() {
+						return
+					}
+					a.stats.Tick()
 				}
-				a.stats.Tick()
 			}
 		}()
 		eng.Wait()
-		tick.Stop()
 
 		a.mu.Lock()
 		if a.engine == eng {

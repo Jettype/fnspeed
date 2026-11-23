@@ -163,6 +163,52 @@ func TestFinalizeIsIdempotent(t *testing.T) {
 
 // ---------------- 瞬时速率（D4 恒 0 bps 的回归） ----------------
 
+// TestWindowRateSpreadsBurst 守的是「3 Gbps」那类假数字。
+//
+// 老实现用相邻两点差分：500ms 里补进 190MB（停滞后 TCP 成批吐出，
+// 或两次 Tick 被调度挤到一起）就得到 380MB/s ≈ 3 Gbps，而链路只有 1 Gbps。
+// 1 秒窗口把同一段突发摊到两倍时长上，误差上限减半；真实的持续性速率不受影响。
+func TestWindowRateSpreadsBurst(t *testing.T) {
+	const t0 = int64(1_700_000_000_000)
+	recv := []int64{0, 1e6, 2e6, 3e6, 4e6, 5e6}
+	samples := make([]Sample, len(recv))
+	for i := range recv {
+		samples[i] = Sample{T: t0 + int64(i)*500, Recv: recv[i]}
+	}
+	// 最后 500ms 一次补进 190MB
+	newT := samples[len(samples)-1].T + 500
+	newRecv := samples[len(samples)-1].Recv + (190 << 20)
+
+	rr, _, ok := windowRate(samples, newT, newRecv, 0)
+	if !ok {
+		t.Fatal("应当算出速率")
+	}
+	adjacent := float64(newRecv-samples[len(samples)-1].Recv) / 0.5 // 老算法
+	if float64(rr) >= adjacent*0.75 {
+		t.Fatalf("窗口速率 %d B/s 仍接近单区间峰值 %.0f B/s：突发没有被摊平", rr, adjacent)
+	}
+	if rr > 240e6 {
+		t.Fatalf("窗口速率 %d B/s 超过 1.9 Gbps，仍会被当成链路异常", rr)
+	}
+}
+
+// 两条 Tick 挤在 2ms 内时，不能把 1MB 的差值算成 500MB/s。
+func TestWindowRateIgnoresTinyTickGap(t *testing.T) {
+	const t0 = int64(1_700_000_000_000)
+	var samples []Sample
+	for i := int64(0); i < 6; i++ {
+		samples = append(samples, Sample{T: t0 + i*500, Recv: i * 1e6})
+	}
+	last := samples[len(samples)-1]
+	rr, _, ok := windowRate(samples, last.T+2, last.Recv+1e6, 0)
+	if !ok {
+		t.Fatal("应当算出速率")
+	}
+	if rr > 10e6 {
+		t.Fatalf("2ms 间隔算出 %d B/s，dt 过小时应退化成 1 秒窗口", rr)
+	}
+}
+
 func TestSnapshotRateComesFromTick(t *testing.T) {
 	st := NewStats()
 	st.Reset()

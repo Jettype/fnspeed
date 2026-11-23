@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,10 @@ type RegionNode struct {
 	Prov string `json:"prov"` // 广东
 	ISP  string `json:"isp"`  // 电信
 	ECS  string `json:"ecs"`  // 代表地址（该省该运营商的公网地址）
+	// Group 为空表示国内省份；"overseas" 表示海外节点。
+	// 海外节点同样靠 ECS 生效：多数 CDN（Cloudflare / Akamai / CloudFront）
+	// 认 ECS 胜过认解析器位置，所以从国内发起也能拿到指定海外城市的节点。
+	Group string `json:"group,omitempty"`
 }
 
 // regionNodes 用公网 IP 归属库逐条核对过省和运营商，只保留「省对 + 运营商对」
@@ -127,6 +132,45 @@ var regionNodes = []RegionNode{
 	{ID: "xj-ct", Prov: "新疆", ISP: "电信", ECS: "61.128.114.167"},
 	{ID: "xj-cu", Prov: "新疆", ISP: "联通", ECS: "221.7.1.20"},
 	{ID: "xj-cm", Prov: "新疆", ISP: "移动", ECS: "211.138.34.2"},
+
+	// ---------------- 海外节点 ----------------
+	// 每一条的 ECS 都用 ip-api 逐个核对过「国家 + 城市 + 运营商」，
+	// 全部是该国本地的公共 DNS / 运营商出口地址，不是随便找的公网 IP。
+	// 选 DNS 服务器当 ECS 是刻意的：CDN 本来就把「递归 DNS 的位置」当成
+	// 客户端位置，用它们自己的地址表达「我在这座城市」，最不容易被
+	// GeoIP 库判错。
+	//
+	// 用途有两个：
+	//   1) 指定海外城市测回程（例如人在国内，测「东京节点」或「法兰克福节点」）；
+	//   2) 配合「海外优先」，让只在海外有 POP 的源（Cloudflare / Fastly /
+	//      CloudFront / Google）把该城市的边缘节点交出来。
+	{ID: "intl-hk-hkbn", Prov: "中国香港", ISP: "香港宽频", ECS: "203.80.96.10", Group: "overseas"},
+	{ID: "intl-hk-hkt", Prov: "中国香港", ISP: "HKT", ECS: "210.177.95.1", Group: "overseas"},
+	{ID: "intl-jp-tyo", Prov: "日本", ISP: "东京 · ARTERIA", ECS: "202.231.71.2", Group: "overseas"},
+	{ID: "intl-jp-tyo2", Prov: "日本", ISP: "东京 · Yahoo", ECS: "203.141.32.1", Group: "overseas"},
+	{ID: "intl-kr-sel", Prov: "韩国", ISP: "首尔 · KT", ECS: "168.126.63.1", Group: "overseas"},
+	{ID: "intl-sg-singnet", Prov: "新加坡", ISP: "SingNet", ECS: "165.21.83.88", Group: "overseas"},
+	{ID: "intl-sg-starhub", Prov: "新加坡", ISP: "StarHub", ECS: "202.156.1.17", Group: "overseas"},
+	{ID: "intl-us-nyc", Prov: "美国", ISP: "纽约 · Vercara", ECS: "64.6.64.6", Group: "overseas"},
+	{ID: "intl-us-mich", Prov: "美国", ISP: "密歇根 · CenturyLink", ECS: "205.171.3.65", Group: "overseas"},
+	{ID: "intl-us-va", Prov: "美国", ISP: "弗吉尼亚 · ARIN", ECS: "199.212.0.73", Group: "overseas"},
+	{ID: "intl-de-ulm", Prov: "德国", ISP: "乌尔姆 · 德国电信", ECS: "194.25.2.129", Group: "overseas"},
+	{ID: "intl-de-ka", Prov: "德国", ISP: "卡尔斯鲁厄 · IONOS", ECS: "213.165.64.1", Group: "overseas"},
+	{ID: "intl-gb-bt", Prov: "英国", ISP: "BTnet", ECS: "194.74.65.68", Group: "overseas"},
+	{ID: "intl-gb-plusnet", Prov: "英国", ISP: "PlusNet", ECS: "212.159.6.9", Group: "overseas"},
+	{ID: "intl-fr-ovh", Prov: "法国", ISP: "鲁贝 · OVH", ECS: "213.186.33.99", Group: "overseas"},
+	{ID: "intl-nl-ams", Prov: "荷兰", ISP: "阿姆斯特丹 · KPN", ECS: "195.121.1.34", Group: "overseas"},
+	{ID: "intl-au-syd", Prov: "澳大利亚", ISP: "悉尼 · Telstra", ECS: "139.130.4.5", Group: "overseas"},
+}
+
+// IsOverseasRegion 报告某个测速位置是不是海外节点。
+// 空串（就近）与未知 id 都返回 false。
+func IsOverseasRegion(id string) bool {
+	if id == "" {
+		return false
+	}
+	n, ok := regionIndex[id]
+	return ok && n.Group == "overseas"
 }
 
 var regionIndex = func() map[string]RegionNode {
@@ -148,13 +192,16 @@ func RegionLabel(id string) string {
 	return ""
 }
 
-// RegionOptions 给前端渲染下拉框：按省分组，省内固定 电信 / 联通 / 移动 顺序。
+// RegionOptions 给前端渲染下拉框：按省分组，省内固定 电信 / 联通 / 移动 顺序，
+// 海外节点排在最后并带 overseas 标记（前端据此加「海外 ·」前缀）。
 func RegionOptions() []map[string]any {
 	byProv := map[string][]RegionNode{}
 	order := []string{}
+	overseas := map[string]bool{}
 	for _, n := range regionNodes {
 		if _, ok := byProv[n.Prov]; !ok {
 			order = append(order, n.Prov)
+			overseas[n.Prov] = n.Group == "overseas"
 		}
 		byProv[n.Prov] = append(byProv[n.Prov], n)
 	}
@@ -164,7 +211,7 @@ func RegionOptions() []map[string]any {
 		for _, n := range byProv[p] {
 			items = append(items, map[string]string{"id": n.ID, "isp": n.ISP})
 		}
-		out = append(out, map[string]any{"prov": p, "items": items})
+		out = append(out, map[string]any{"prov": p, "items": items, "overseas": overseas[p]})
 	}
 	return out
 }
@@ -178,6 +225,19 @@ const (
 	dohBackup   = "https://223.6.6.6/resolve"
 )
 
+// overseasDoH 是「海外优先」用的解析链：不带 ECS，让 CDN 按解析器的位置
+// 返回节点。两家都支持 JSON 格式的 DoH，字段与阿里一致（name / type / Answer）。
+//
+// 国内直连这两家经常被拦，失败时会自动退到本机 DNS —— 降级路径写在
+// pinOverseas 里，不是错误，只是「这次没成功改到海外」。
+var overseasDoH = []struct {
+	base string
+	name string
+}{
+	{"https://cloudflare-dns.com/dns-query?ct=application/dns-json", "Cloudflare DoH"},
+	{"https://dns.google/resolve", "Google DoH"},
+}
+
 type dohAnswer struct {
 	Status int `json:"Status"`
 	Answer []struct {
@@ -187,8 +247,10 @@ type dohAnswer struct {
 }
 
 type pinEntry struct {
-	ip string
-	at time.Time
+	key string
+	ip  string
+	via string
+	at  time.Time
 }
 
 type pinResolver struct {
@@ -212,21 +274,60 @@ func (r *pinResolver) Resolve(ctx context.Context, host, regionID string) (strin
 		return "", fmt.Errorf("未知测速位置 %q", regionID)
 	}
 	key := host + "|" + regionID
-	r.mu.Lock()
-	if e, ok := r.cache[key]; ok && time.Since(e.at) < dohTTL {
-		r.mu.Unlock()
+	if e, ok := r.cached(key); ok {
 		return e.ip, nil
 	}
-	r.mu.Unlock()
-
 	ip, err := r.query(ctx, host, n.ECS)
 	if err != nil {
 		return "", err
 	}
-	r.mu.Lock()
-	r.cache[key] = pinEntry{ip: ip, at: time.Now()}
-	r.mu.Unlock()
+	r.store(pinEntry{key: key, ip: ip})
 	return ip, nil
+}
+
+// ResolveOverseas 不带 ECS，改用海外公共 DNS 解析。
+//
+// 这是「优先命中海外 CDN」的实现：Cloudflare / Fastly / CloudFront 这类
+// 没有大陆 POP 的源，其 GeoDNS 依据「递归解析器的出口位置」选点 ——
+// 用海外解析器问一次，拿到的就是海外边缘节点。拿到 IP 后强制拨号过去，
+// TLS 的 SNI 与证书校验仍按原域名走，CDN 不会察觉。
+//
+// 返回实际生效的解析器名字，界面要显示「是怎么打过去的」，不能静默回落。
+func (r *pinResolver) ResolveOverseas(ctx context.Context, host string) (ip, via string, err error) {
+	key := "overseas|" + host
+	if e, ok := r.cached(key); ok {
+		return e.ip, e.via, nil
+	}
+	var lastErr error
+	for _, ep := range overseasDoH {
+		got, e := r.queryOne(ctx, ep.base, host, "")
+		if e == nil && got != "" {
+			r.store(pinEntry{key: key, ip: got, via: ep.name})
+			return got, ep.name, nil
+		}
+		lastErr = e
+	}
+	if lastErr == nil {
+		lastErr = errors.New("解析失败")
+	}
+	return "", "", lastErr
+}
+
+func (r *pinResolver) cached(key string) (pinEntry, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.cache[key]
+	if !ok || time.Since(e.at) >= dohTTL {
+		return pinEntry{}, false
+	}
+	return e, true
+}
+
+func (r *pinResolver) store(e pinEntry) {
+	e.at = time.Now()
+	r.mu.Lock()
+	r.cache[e.key] = e
+	r.mu.Unlock()
 }
 
 func (r *pinResolver) query(ctx context.Context, host, ecs string) (string, error) {
@@ -248,7 +349,16 @@ func (r *pinResolver) queryOne(ctx context.Context, base, host, ecs string) (str
 	// 最多跟三跳 CNAME：有的 CDN 只返回 CNAME 不返回 A。
 	name := host
 	for hop := 0; hop < 3; hop++ {
-		u := fmt.Sprintf("%s?name=%s&type=A&edns_client_subnet=%s", base, name, ecs)
+		// base 可能自带查询串（Cloudflare 的 JSON 接口要 ?ct=application/dns-json），
+		// 拼接分隔符不能写死 "?"，否则会拼出 "...?ct=json?name=..." 这种死链。
+		sep := "?"
+		if strings.Contains(base, "?") {
+			sep = "&"
+		}
+		u := base + sep + "name=" + url.QueryEscape(name) + "&type=A"
+		if ecs != "" {
+			u += "&edns_client_subnet=" + url.QueryEscape(ecs)
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
 			return "", err
@@ -310,4 +420,22 @@ func pinFrom(ctx context.Context) *pinTarget {
 		return p
 	}
 	return nil
+}
+
+// isLocalHost 判断主机名是不是内网 / 本机目标。
+// 这类目标既没有 CDN 调度可谈，也不该把内网主机名发到公共 DoH 上。
+func isLocalHost(host string) bool {
+	h := strings.ToLower(strings.TrimSuffix(host, "."))
+	if h == "localhost" {
+		return true
+	}
+	for _, suf := range []string{".local", ".lan", ".home", ".internal"} {
+		if strings.HasSuffix(h, suf) {
+			return true
+		}
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+	}
+	return false
 }

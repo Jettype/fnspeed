@@ -85,6 +85,69 @@ func TestNormalizeSettingsRegion(t *testing.T) {
 	}
 }
 
+// TestOverseasRegions 锁住「海外节点」这一层：
+// 少一条只是选项少了，但 id 写错或 Group 漏填会让 IsOverseasRegion 判错，
+// 进而让「海外优先」的起始并发与提示都不生效 —— 这种错静默且难查。
+func TestOverseasRegions(t *testing.T) {
+	n := 0
+	provinces := map[string]bool{}
+	for _, r := range regionNodes {
+		if r.Group == "overseas" {
+			n++
+			provinces[r.Prov] = true
+			if net.ParseIP(r.ECS) == nil {
+				t.Errorf("%s 的 ECS 不合法", r.ID)
+			}
+		}
+	}
+	if n < 10 {
+		t.Fatalf("海外节点只有 %d 条，至少应有 10", n)
+	}
+	if len(provinces) < 8 {
+		t.Fatalf("海外只覆盖 %d 个地区，至少要 8 个", len(provinces))
+	}
+	if !IsOverseasRegion("intl-jp-tyo") {
+		t.Error("东京节点应被判定为海外")
+	}
+	if IsOverseasRegion("gd-ct") {
+		t.Error("广东电信是境内节点")
+	}
+	if IsOverseasRegion("") || IsOverseasRegion("nope") {
+		t.Error("空值与未知 id 都应为 false")
+	}
+}
+
+// 前端靠 overseas 标记给分组加「海外 ·」前缀，漏了就只能靠省份名猜。
+func TestRegionOptionsMarksOverseas(t *testing.T) {
+	found := false
+	for _, o := range RegionOptions() {
+		if o["prov"] == "日本" {
+			found = true
+			if v, _ := o["overseas"].(bool); !v {
+				t.Error("日本分组应标记为海外")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("没有日本分组")
+	}
+}
+
+func TestNormalizeSettingsPrefer(t *testing.T) {
+	g := GlobalSettings{Prefer: "overseas"}
+	normalizeSettings(&g)
+	if g.Prefer != "overseas" {
+		t.Errorf("合法偏好被抹掉了：%q", g.Prefer)
+	}
+	for _, bad := range []string{"auto", "intl", "海外", "OVERSEAS"} {
+		g = GlobalSettings{Prefer: bad}
+		normalizeSettings(&g)
+		if g.Prefer != "" {
+			t.Errorf("非法偏好 %q 应回落就近，实际 %q", bad, g.Prefer)
+		}
+	}
+}
+
 // TestPinResolveLive 会真的发 DoH 查询，默认跳过（CI 无外网时不该红）。
 // 手动跑：go test -run TestPinResolveLive -v
 func TestPinResolveLive(t *testing.T) {
