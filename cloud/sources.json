@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-23.1",
+  "rev": "2026-11-25.1",
   "ttlSec": 21600,
-  "issuedAt": 1794930086,
+  "issuedAt": 1795583749,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "公共测速源，2026-11-23 新增 Fastly / AWS CloudFront / Google / Hetzner 四家海外厂商（单线程直连实测 3.7–17MB/s），「海外八源聚合」改为八家互不相干的供应商，降低单家抖动带来的整组波动",
+  "notice": "公共测速源，2026-11-25 更新百度：网盘 PC 端换到官网当前版本 8.10.5.101（504MB，实测 42.9MB/s），并补入 pkg-ant.baidu.com 的库库 AI 客户端（172MB，42.5MB/s），同一厂商两个 CDN 域名互作备份",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -366,13 +366,14 @@
     },
     {
       "id": "cn-vendor-mix",
-      "name": "国内厂商大文件 · 7源",
+      "name": "国内厂商大文件 · 8源",
       "group": "国内",
-      "desc": "百度 307/189MB + 移动和彩云 205MB + 支付宝 173MB + 天翼云 75/64MB + 爱奇艺 63MB。覆盖百度/移动/阿里/电信/联通多家 CDN，2026-11 单线程实测 2.8–33.0MB/s。网易新闻 APK 已 403、网易视频 MP4 仅 1.3MB/s，均已剔除；网易系保留 cn-netease 的逆水寒客户端。",
+      "desc": "百度 504/189/172MB（issuepcdn 网盘 PC 8.10.5.101、issuecdn 网盘 APK、pkg-ant 库库 AI）+ 和彩云 205MB + 支付宝 173MB + 天翼云 75/64MB + 爱奇艺 63MB。2026-11-25 单线程实测 27–43MB/s。",
       "mode": "down",
       "downloadUrls": [
-        "https://issuepcdn.baidupcs.com/issue/netdisk/yunguanjia/BaiduNetdisk_7.30.5.2.exe",
+        "https://issuepcdn.baidupcs.com/issue/netdisk/yunguanjia/BaiduNetdisk_8.10.5.101.exe",
         "https://issuecdn.baidupcs.com/issue/netdisk/apk/BaiduNetdiskSetup_wap_share.apk",
+        "https://pkg-ant.baidu.com/issue/netdisk/PCGenFlowPro/1.15.0.101/KukuAI_1.15.0.101.exe",
         "https://yun.mcloud.139.com/mCloud/mCloud_11.2.2_24112201_000.apk",
         "https://mdn.alipayobjects.com/ind_developertool/afts/file/A*fSAmSbgxLosAAAAAAAAAAAAADlx-AQ?af_fileName=AlipayKeyTool-2.0.3.dmg",
         "https://desk.ctyun.cn/desktop/software/clientsoftware/download/5961fa22ee369eba433da6b0247eb11f",

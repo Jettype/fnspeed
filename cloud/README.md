@@ -12,14 +12,29 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 ```
 
 填进侧栏「云端源」即可（命令行是 `POST /api/settings` 的 `cloudEndpoint`）。
-现在 34 个配置集 / 137 条端点（`rev` = 2026-11-17.1）。**标了速度的都是用 fnspeed 自己真跑出来的**
+现在 38 个配置集 / 145 条端点（`rev` = 2026-11-25.1）。**标了速度的都是用 fnspeed 自己真跑出来的**
 （并发 2–8、8–10 秒，测试环境出口带宽明显高于表里所有峰值），不是探活就算过。
 
 | 分组 | 内容 |
 |---|---|
-| 国内 | 腾讯 4 / 阿里 6 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十四源聚合 14 / 厂商大文件 7 / 微软 2 · B站 5 · 字节 1 / **米哈游 6 · 库洛 2 · 完美 1 · 网易 1** / 大文件补充 3 |
-| 国外 | Cloudflare / OVH / Vultr 单点 4 / 海外六源聚合 6 / Vultr 亚太 5·欧洲 7·美洲 9·中东非 2 / **DataPacket 东京 1·欧洲 9·北美 7 / 10GB 档 5 / LibreSpeed 11** |
+| 国内 | 腾讯 4 / 阿里 6 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十四源聚合 14 / 厂商大文件 8 / 微软 2 · B站 5 · 字节 1 / **米哈游 6 · 库洛 2 · 完美 1 · 网易 1** / 大文件补充 3 |
+| 国外 | Cloudflare / OVH / Vultr 单点 4 / Fastly · CloudFront · Google · Hetzner 5 / **海外八源聚合 8** / Vultr 亚太 5·欧洲 7·美洲 9·中东非 2 / **DataPacket 东京 1·欧洲 9·北美 7 / 10GB 档 5 / LibreSpeed 11** |
 | 上传 | **LibreSpeed 11** / Cloudflare `__up` / 本机 sink |
+
+### 2026-11-25 百度源更新
+
+百度那两个文件本来就没坏，单线程 43.5 / 34.3MB/s，问题在**版本落后**：清单里还是 7.30.5.2（307MB），
+官网已到 8.10.5.101（504MB，42.9MB/s）。百度网盘下载页是 JS 渲染、HTML 里没有直链，要从接口取：
+
+```bash
+curl 'https://pan.baidu.com/disk/cmsdata?clienttype=0&web=1&channel=chunlei' \
+  -H 'Referer: https://pan.baidu.com/download'
+# list[].url 即当前各客户端的 CDN 直链（百度网盘 PC/Mac、库库 AI 等），list[].size 是体积
+```
+
+改动：PC 端换 8.10.5.101；补 `pkg-ant.baidu.com` 的库库 AI 客户端 172MB（42.5MB/s）。
+百度现在占 3 条，分别落在 **issuepcdn / issuecdn / pkg-ant 三个不同域名**上，
+单节点抖动不会让整组归零。配置集 7 → 8 源，端点 144 → 145。
 
 ### 2026-11-17 全量复测与清理
 
@@ -122,7 +137,7 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 
 - **Vultr 会按并发掐**。同一节点打到 8 条以上并发就回 503，串行访问立刻恢复。
   所以拆成 4 个地区组，让 failover 把压力摊开，别指望单节点跑满
-- **带版本号的地址会随厂商发版失效**（百度 7.30.5.2、爱奇艺 10.9.1、.NET SDK 9.0.100）。
+- **带版本号的地址会随厂商发版失效**（百度 8.10.5.101、爱奇艺 10.9.1、.NET SDK 9.0.100）。
   这也是把源放云端的理由：换一条推上去就行，不用重新打包。
   用 `latest` 语义的（VS Code、B站）不受影响，只有固定版本号的要盯
 
