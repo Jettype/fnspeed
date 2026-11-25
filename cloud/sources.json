@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-25.2",
+  "rev": "2026-11-25.3",
   "ttlSec": 21600,
-  "issuedAt": 1795585810,
+  "issuedAt": 1795588659,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "公共测速源，2026-11-25 二轮扩充：四路并行检索 48 条候选，按可用性/两轮稳定性/体积筛选后新增 4 组 18 条，含国内办公影音、国内开源镜像、游戏大分卷与海外镜像；跨境源只保留两轮都稳定的两条",
+  "notice": "公共测速源，2026-11-25 百度三条独立成组：cn-baidu「百度 · 3源」单列网盘 PC / 网盘 APK / 库库 AI，cn-vendor-mix 收窄为和彩云·支付宝·天翼云·爱奇艺 5 条",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -365,15 +365,27 @@
       "switchPolicy": "failover"
     },
     {
-      "id": "cn-vendor-mix",
-      "name": "国内厂商大文件 · 8源",
+      "id": "cn-baidu",
+      "name": "百度 · 3源",
       "group": "国内",
-      "desc": "百度 504/189/172MB（issuepcdn 网盘 PC 8.10.5.101、issuecdn 网盘 APK、pkg-ant 库库 AI）+ 和彩云 205MB + 支付宝 173MB + 天翼云 75/64MB + 爱奇艺 63MB。2026-11-25 单线程实测 27–43MB/s。",
+      "desc": "网盘 PC 8.10.5.101 504MB（42.9MB/s）、网盘 APK 189MB（34.3）、库库 AI 172MB（42.5），分落 issuepcdn / issuecdn / pkg-ant 三个域名，单节点抖动不致整组归零。PC 版本号随发版失效，重取接口见 cloud/README.md。",
       "mode": "down",
       "downloadUrls": [
         "https://issuepcdn.baidupcs.com/issue/netdisk/yunguanjia/BaiduNetdisk_8.10.5.101.exe",
         "https://issuecdn.baidupcs.com/issue/netdisk/apk/BaiduNetdiskSetup_wap_share.apk",
-        "https://pkg-ant.baidu.com/issue/netdisk/PCGenFlowPro/1.15.0.101/KukuAI_1.15.0.101.exe",
+        "https://pkg-ant.baidu.com/issue/netdisk/PCGenFlowPro/1.15.0.101/KukuAI_1.15.0.101.exe"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-vendor-mix",
+      "name": "国内厂商大文件 · 5源",
+      "group": "国内",
+      "desc": "和彩云 205MB + 支付宝 173MB + 天翼云 75/64MB + 爱奇艺 63MB，移动/阿里/电信/爱奇艺四家 CDN。2026-11 单线程实测 2.8–33MB/s；百度三条已独立成 cn-baidu。",
+      "mode": "down",
+      "downloadUrls": [
         "https://yun.mcloud.139.com/mCloud/mCloud_11.2.2_24112201_000.apk",
         "https://mdn.alipayobjects.com/ind_developertool/afts/file/A*fSAmSbgxLosAAAAAAAAAAAAADlx-AQ?af_fileName=AlipayKeyTool-2.0.3.dmg",
         "https://desk.ctyun.cn/desktop/software/clientsoftware/download/5961fa22ee369eba433da6b0247eb11f",
