@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-25.1",
+  "rev": "2026-11-25.2",
   "ttlSec": 21600,
-  "issuedAt": 1795583749,
+  "issuedAt": 1795585810,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "公共测速源，2026-11-25 更新百度：网盘 PC 端换到官网当前版本 8.10.5.101（504MB，实测 42.9MB/s），并补入 pkg-ant.baidu.com 的库库 AI 客户端（172MB，42.5MB/s），同一厂商两个 CDN 域名互作备份",
+  "notice": "公共测速源，2026-11-25 二轮扩充：四路并行检索 48 条候选，按可用性/两轮稳定性/体积筛选后新增 4 组 18 条，含国内办公影音、国内开源镜像、游戏大分卷与海外镜像；跨境源只保留两轮都稳定的两条",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -512,6 +512,58 @@
       "switchPolicy": "failover"
     },
     {
+      "id": "cn-app",
+      "name": "国内办公影音 · 7源",
+      "group": "国内",
+      "desc": "钉钉438 / 飞书349 / 搜狗206 / 搜狐142 / 咪咕108 / 360浏览器100 / 115浏览器57MB。阿里OSS·字节·腾讯COS·移动·搜狐自建，两轮实测 3.0–38MB/s。",
+      "mode": "down",
+      "downloadUrls": [
+        "https://data.vod.itc.cn/foxd/gz?file=SoHuVA_7.3.2.0-c1000-x.exe&new=/189/65/We1PnKYLTaayc9F1SjKnlH.exe",
+        "https://ime.gtimg.com/pc/sogou_pinyin_16.10.exe",
+        "https://down.115.com/client/win/115br_25.0.6.5.exe",
+        "https://dtapp-cast.dingtalk.com/202908242023/4090273bee39319286ee77436ca0b845/dingtalk-desktop/win_installer/Release/DingTalk_v8.2.0.260119001.exe",
+        "https://pcdown.miguvideo.com/MiguApi/download/MiguVideo4.16.0.510.exe",
+        "https://sedl.360tpcdn.com/cse/360cse_23.0.1253.0.exe",
+        "https://sf3-cn.feishucdn.com/obj/ee-appcenter/15d07312/Feishu-win32_x64-7.61.6-signed.exe"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-mirror",
+      "name": "国内开源镜像 · 6源",
+      "group": "国内",
+      "desc": "华为云 spark382/netbeans486/eclipse331/torch850MB，腾讯云 hadoop929/gradle130MB。华为 ISO 路径被 WAF 伪 200（GET 418），只用 /apache/、/pypi/；阿里镜像仅 0.24MB/s 未收。两轮 7–41MB/s。",
+      "mode": "down",
+      "downloadUrls": [
+        "https://mirrors.huaweicloud.com/apache/spark/spark-3.5.3/spark-3.5.3-bin-hadoop3.tgz",
+        "https://mirrors.huaweicloud.com/apache/netbeans/netbeans/23/netbeans-23-bin.zip",
+        "https://mirrors.huaweicloud.com/eclipse/technology/epp/downloads/release/2024-09/R/eclipse-java-2024-09-R-linux-gtk-x86_64.tar.gz",
+        "https://mirrors.huaweicloud.com/repository/pypi/packages/a9/8c/3da60787bcf70add986c4ad485993026ac0ca74f2fc21410bc4eb1bb7695/torch-2.9.1-cp314-cp314t-manylinux_2_28_x86_64.whl",
+        "https://mirrors.cloud.tencent.com/apache/hadoop/common/hadoop-3.4.1/hadoop-3.4.1.tar.gz",
+        "https://mirrors.cloud.tencent.com/gradle/gradle-8.10.2-bin.zip"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-game-big",
+      "name": "游戏大分卷 · 3源",
+      "group": "国内",
+      "desc": "永劫无间补丁 3.3GB / 2.0GB（网易 d90，36–45MB/s）、雷霆手游整包 1.9GB（18–21MB/s）。单文件最大、适合长时段；补丁按日期命名会被清理，失效后从官网下载页重取。",
+      "mode": "down",
+      "downloadUrls": [
+        "https://d90.gdl.netease.com/publish/patch_2025-08-22-14-00_2025-09-03-18-00.yjwjp",
+        "https://d90.gdl.netease.com/publish/patch_2025-08-06-08-00_2025-08-20-15-00.yjwjp",
+        "https://atmdlf.leiting.com/full/M143678_20261121_89871795232553036.apk"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
       "id": "intl-dp-apac",
       "name": "DataPacket 东京",
       "downloadUrls": [
@@ -638,6 +690,20 @@
       "urlRotate": "sticky",
       "switchPolicy": "failover",
       "desc": "garbage.php?ckSize=512 服务端实时生成 512MB 不可压缩随机流，no-store + keep-alive，不缓存也就不会「下载同一个文件被 CDN 优化」。实测单条 119Mbps，比 DataPacket 快 4 倍。不支持 Range（返回 200 全量），引擎会从头读、读完重连，正好是压测想要的持续流。ckSize 上限 1024MB"
+    },
+    {
+      "id": "intl-mirror",
+      "name": "海外镜像 · 2源",
+      "group": "国外",
+      "desc": "15 条海外镜像/发布物两轮实测只留两条：Arch(Rackspace) 1.25GB 4.4–7.5MB/s、维基英文 dump 285MB 3.7MB/s；其余跨境低于 1MB/s，Firefox 与 Epic 第二轮崩到 0.02/0.16MB/s。",
+      "mode": "down",
+      "downloadUrls": [
+        "https://mirror.rackspace.com/archlinux/iso/latest/archlinux-x86_64.iso",
+        "https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles1.xml-p1p41242.bz2"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
     },
     {
       "id": "up-cf",

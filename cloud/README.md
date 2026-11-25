@@ -12,14 +12,41 @@ https://raw.githubusercontent.com/Jettype/fnspeed/main/cloud/sources.json
 ```
 
 填进侧栏「云端源」即可（命令行是 `POST /api/settings` 的 `cloudEndpoint`）。
-现在 38 个配置集 / 145 条端点（`rev` = 2026-11-25.1）。**标了速度的都是用 fnspeed 自己真跑出来的**
+现在 42 个配置集 / 163 条端点（`rev` = 2026-11-25.2）。**标了速度的都是用 fnspeed 自己真跑出来的**
 （并发 2–8、8–10 秒，测试环境出口带宽明显高于表里所有峰值），不是探活就算过。
 
 | 分组 | 内容 |
 |---|---|
-| 国内 | 腾讯 4 / 阿里 6 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十四源聚合 14 / 厂商大文件 8 / 微软 2 · B站 5 · 字节 1 / **米哈游 6 · 库洛 2 · 完美 1 · 网易 1** / 大文件补充 3 |
-| 国外 | Cloudflare / OVH / Vultr 单点 4 / Fastly · CloudFront · Google · Hetzner 5 / **海外八源聚合 8** / Vultr 亚太 5·欧洲 7·美洲 9·中东非 2 / **DataPacket 东京 1·欧洲 9·北美 7 / 10GB 档 5 / LibreSpeed 11** |
+| 国内 | 腾讯 4 / 阿里 6 / 迅雷 2 / 苹果 1 / 鹰角 1 / 十四源聚合 14 / 厂商大文件 8 / **办公影音 7 / 开源镜像 6 / 游戏大分卷 3** / 微软 2 · B站 5 · 字节 1 / **米哈游 6 · 库洛 2 · 完美 1 · 网易 1** / 大文件补充 3 |
+| 国外 | Cloudflare / OVH / Vultr 单点 4 / Fastly · CloudFront · Google · Hetzner 5 / **海外八源聚合 8** / Vultr 亚太 5·欧洲 7·美洲 9·中东非 2 / **DataPacket 东京 1·欧洲 9·北美 7 / 10GB 档 5 / LibreSpeed 11 / 海外镜像 2** |
 | 上传 | **LibreSpeed 11** / Cloudflare `__up` / 本机 sink |
+
+### 2026-11-25 二轮扩充：四路并行检索
+
+按「国内厂商 / 海外测速与云存储 / 国内镜像与开源分发 / 游戏 CDN」四路并行检索，
+汇总 48 条候选（已剔除与现有 92 个域名重复的），先做 HEAD + 1KB Range 双检，
+再用本项目口径**单线程 6 秒**复测，对入选项做**第二轮**同口径复测。
+
+| 新增组 | 条数 | 内容 | 两轮实测 |
+|---|---|---|---|
+| `cn-app` 国内办公影音 | 7 | 钉钉 438MB、飞书 349MB、搜狗输入法 206MB、搜狐影音 142MB、咪咕 108MB、360 浏览器 100MB、115 浏览器 57MB | 3.0–38MB/s |
+| `cn-mirror` 国内开源镜像 | 6 | 华为云 spark 382MB / netbeans 486MB / eclipse 331MB / torch 850MB，腾讯云 hadoop 929MB / gradle 130MB | 7–41MB/s |
+| `cn-game-big` 游戏大分卷 | 3 | 永劫无间补丁 3.3GB / 2.0GB（网易 `d90.gdl.netease.com`）、雷霆手游整包 1.9GB | 18–45MB/s |
+| `intl-mirror` 海外镜像 | 2 | Arch 官方镜像（Rackspace）1.25GB、维基英文 dump 285MB | 3.7–7.5MB/s |
+
+**筛选规则**：两轮都要 ≥3MB/s；同一文件的多镜像只留最快的（6 条 Ubuntu 24.04 镜像跨境
+全部低于 2.2MB/s，一条未收）；带过期签名的（JetBrains `Expires=`/`Signature=`）、需 Cookie 的
+（Epic API 的 `__cf_bm`）、需 Referer 的一律不收。
+
+**这次的坑**：华为云 ISO 路径会「HEAD 200 + `Accept-Ranges: bytes` + 正确 Content-Length，
+但真实 GET 一律 418」——WAF 伪装，只看 HEAD 会把它当好源收进来。所以探测必须用
+Range GET 而不是 HEAD。同类排除：清华 TUNA / 北外 BFSU 403、中科大 USTC 返回 JS 挑战页、
+上交 Cerberus 挑战、南大 302 死循环、阿里云镜像到家宽仅 0.24–0.29MB/s、暴雪 `level3`
+握手 EOF、Epic Akamai 节点超时。
+
+**跨境仍然不能按绝对速度判断**：15 条海外候选里 13 条低于 1MB/s；Firefox（Fastly）与
+Epic 首轮 15.3 / 17.3MB/s，第二轮掉到 0.02 / 0.16MB/s —— 单次采样会误判，所以入选项一律
+跑两轮。这也是「海外八源聚合」只选八家不同厂商的原因。
 
 ### 2026-11-25 百度源更新
 
