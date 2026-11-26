@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-26.1",
+  "rev": "2026-11-26.2",
   "ttlSec": 21600,
-  "issuedAt": 1795668518,
+  "issuedAt": 1795668963,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "公共测速源，2026-11-26 新增中国移动 / 中国联通 / 中国电信三组，按运营商分开；配置说明只写链路与失效特性，不再标注速度（单次采样会误导）",
+  "notice": "公共测速源，2026-11-26 新增中国移动 / 中国联通 / 中国电信三组，按运营商分开；配置说明只写文件体积、CDN 归属与失效特性",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -266,7 +266,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "各 1GB，Hetzner 自有骨干的新加坡与阿什本节点。1GB 单文件在千兆下能连续读 8 秒以上，重连频率远低于 100MB 档。",
+      "desc": "各 1GB，Hetzner 自有骨干的新加坡与阿什本节点。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
