@@ -1,12 +1,12 @@
 {
   "format": "FNS_CLOUD_SOURCES",
   "version": 1,
-  "rev": "2026-11-25.3",
+  "rev": "2026-11-26.1",
   "ttlSec": 21600,
-  "issuedAt": 1795588659,
+  "issuedAt": 1795668518,
   "minAppVersion": "1.6.0-alpha",
   "mode": "replace",
-  "notice": "公共测速源，2026-11-25 百度三条独立成组：cn-baidu「百度 · 3源」单列网盘 PC / 网盘 APK / 库库 AI，cn-vendor-mix 收窄为和彩云·支付宝·天翼云·爱奇艺 5 条",
+  "notice": "公共测速源，2026-11-26 新增中国移动 / 中国联通 / 中国电信三组，按运营商分开；配置说明只写链路与失效特性，不再标注速度（单次采样会误导）",
   "profiles": [
     {
       "id": "cn-tencent",
@@ -21,7 +21,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国内",
-      "desc": "王者荣耀 1968MB + 微信 PC 270MB/x86 173MB + 企业微信 523MB，腾讯自建分发（dlied4 / dldir1）。2026-11 单线程实测 3.1–15.8MB/s，支持 Range、不掐长连接。企业微信路径带版本号，官方发新版后需替换。",
+      "desc": "王者荣耀 1968MB + 微信 PC 270MB/x86 173MB + 企业微信 523MB，腾讯自建分发（dlied4 / dldir1），支持 Range、不掐长连接。企业微信走 work_weixin 目录，路径含版本号，发版换名。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -41,7 +41,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国内",
-      "desc": "node 18/22、electron 22/28/33、Chrome for Testing 131，单文件 83–157MB，走阿里云 CDN。2026-11 单线程实测 5.7–10.1MB/s，国内海外双通；都是归档路径，不随上游版本更新失效。",
+      "desc": "node 18/22、electron 22/28/33、Chrome for Testing 131，单文件 83–157MB，走阿里云 CDN，国内海外双通；都是归档路径，不随上游版本失效。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -57,7 +57,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国内",
-      "desc": "迅雷安装包 172MB + 13MB，自建分发节点。2026-11 实测 5.4 / 6.3MB/s，两条都支持 Range。",
+      "desc": "迅雷安装包 172MB + 13MB，自建分发节点，两条都支持 Range。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -72,7 +72,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国内",
-      "desc": "2.9GB iOS 固件，苹果自有 CDN。2026-11 实测 6.3–17.2MB/s，境内速度最好的一条；同文件另有 http 明文入口，见「国内大文件补充」。",
+      "desc": "2.9GB iOS 固件，苹果自有 CDN；同文件另有 http 明文入口，见「国内大文件补充」。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -87,7 +87,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国内",
-      "desc": "1.8GB 明日方舟安卓包，走字节跳动 CDN，官方 latest 别名不会随版本失效。2026-11 实测 23.0MB/s。",
+      "desc": "1.8GB 明日方舟安卓包，走字节跳动 CDN，官方 latest 别名不会随版本失效。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -115,7 +115,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国内",
-      "desc": "腾讯 4 + 阿里 6 + 迅雷 2 + 苹果 1 + 鹰角 1，共 14 条，全部为 2026-11 实测可用的厂商自有 CDN。任意一条挂了自动换源，最容易跑满；建议并发上限保持 16 以上让调度器有爬坡空间。",
+      "desc": "腾讯 4 + 阿里 6 + 迅雷 2 + 苹果 1 + 鹰角 1，共 14 条，全部为厂商自有 CDN。任意一条挂了自动换源；建议并发上限保持 16 以上，给调度器留爬坡空间。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -220,7 +220,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "133MB Linux 内核源码，走 Fastly 自有骨干（不是转售）。2026-11-23 单线程直连实测 6.8MB/s，支持 Range。文件带版本号，内核发新大版本后旧链接仍在，不会失效。",
+      "desc": "133MB Linux 内核源码，走 Fastly 自有骨干（不是转售），支持 Range。文件带版本号，内核发新大版本后旧链接仍在，不会失效。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -235,7 +235,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "62MB docker 静态包，CloudFront 边缘分发。2026-11-23 单线程直连实测 5.8MB/s，支持 Range。CloudFront 按客户端 IP 调度，国内通常落在香港/新加坡/东京节点。",
+      "desc": "62MB docker 静态包，CloudFront 边缘分发，支持 Range。CloudFront 按客户端 IP 调度，国内通常落在香港/新加坡/东京节点。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -250,7 +250,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "66MB Go 发行包，Google 自有 CDN（dl.google.com，与 storage.googleapis.com 不同，国内可达）。2026-11-23 单线程直连实测 17MB/s，是这批新增源里最快的。",
+      "desc": "66MB Go 发行包，Google 自有 CDN（dl.google.com，与 storage.googleapis.com 不同，国内可达）。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -266,7 +266,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "各 1GB，Hetzner 自有骨干的新加坡与阿什本节点。2026-11-23 单线程直连实测 3.7 / 4.2MB/s。1GB 单文件在千兆下能连续读 8 秒以上，重连频率远低于 100MB 档。",
+      "desc": "各 1GB，Hetzner 自有骨干的新加坡与阿什本节点。1GB 单文件在千兆下能连续读 8 秒以上，重连频率远低于 100MB 档。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -368,7 +368,7 @@
       "id": "cn-baidu",
       "name": "百度 · 3源",
       "group": "国内",
-      "desc": "网盘 PC 8.10.5.101 504MB（42.9MB/s）、网盘 APK 189MB（34.3）、库库 AI 172MB（42.5），分落 issuepcdn / issuecdn / pkg-ant 三个域名，单节点抖动不致整组归零。PC 版本号随发版失效，重取接口见 cloud/README.md。",
+      "desc": "网盘 PC 8.10.5.101 504MB、网盘 APK 189MB、库库 AI 172MB，分落 issuepcdn / issuecdn / pkg-ant 三个域名，单节点抖动不致整组归零。PC 版本号随发版失效，重取接口见 cloud/README.md。",
       "mode": "down",
       "downloadUrls": [
         "https://issuepcdn.baidupcs.com/issue/netdisk/yunguanjia/BaiduNetdisk_8.10.5.101.exe",
@@ -381,16 +381,68 @@
     },
     {
       "id": "cn-vendor-mix",
-      "name": "国内厂商大文件 · 5源",
+      "name": "国内其他厂商 · 2源",
       "group": "国内",
-      "desc": "和彩云 205MB + 支付宝 173MB + 天翼云 75/64MB + 爱奇艺 63MB，移动/阿里/电信/爱奇艺四家 CDN。2026-11 单线程实测 2.8–33MB/s；百度三条已独立成 cn-baidu。",
+      "desc": "支付宝 173MB（阿里 OSS）、爱奇艺 63MB（爱奇艺自建 CDN）。移动与电信的源已各自独立成 cn-cmcc / cn-telecom。",
       "mode": "down",
       "downloadUrls": [
-        "https://yun.mcloud.139.com/mCloud/mCloud_11.2.2_24112201_000.apk",
         "https://mdn.alipayobjects.com/ind_developertool/afts/file/A*fSAmSbgxLosAAAAAAAAAAAAADlx-AQ?af_fileName=AlipayKeyTool-2.0.3.dmg",
-        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/5961fa22ee369eba433da6b0247eb11f",
-        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/50218cd4d2286623049e374061cffd0e",
         "https://bdcdncnc.inter.71edge.com/cdn/pca/20231130/10.9.1.7348/channel/1701328986348/IQIYIsetup_z43.exe"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-cmcc",
+      "name": "中国移动 · 7源",
+      "group": "国内",
+      "desc": "移动云盘 PC 8.9.2 / 8.4.3 / 港版 dmg 258MB、Android 10.5.3 / 11.2.2，咪咕视频 4.25 / 4.16。中国移动自建 CDN；跨网访问受互联互通影响，适合单独验证移动方向链路。",
+      "mode": "down",
+      "downloadUrls": [
+        "https://yun.mcloud.139.com/mCloudPc/v892/mCloud-8.9.2-001.exe",
+        "https://yun.mcloud.139.com/mCloudPc/v840/mCloud_Setup-001.exe",
+        "https://yun.mcloud.139.com/mCloudPc/vhk/mCloudDrive-1.0.1.dmg",
+        "https://yun.mcloud.139.com/mCloud/mCloud_10.5.3_2410533_0000.apk",
+        "https://yun.mcloud.139.com/mCloud/mCloud_11.2.2_24112201_000.apk",
+        "https://pcdown.miguvideo.com/MiguApi/download/MiguVideo4.25.0.300.exe",
+        "https://pcdown.miguvideo.com/MiguApi/download/MiguVideo4.16.0.510.exe"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-unicom",
+      "name": "中国联通 · 6源",
+      "group": "国内",
+      "desc": "联通云电脑 Windows 经典/无影、macOS pkg/dmg、Android 公共组件与经典版，全部直连 obs-helf.cucloud.cn（联通云对象存储，源站直出，无第三方 CDN，链路干净）。",
+      "mode": "down",
+      "downloadUrls": [
+        "https://obs-helf.cucloud.cn/cdsestorage/CUCloudDesktopClientCommon_for_win.exe",
+        "https://obs-helf.cucloud.cn/cdsestorage/CUCloudDesktopClientCommon_for_mac.pkg",
+        "https://obs-helf.cucloud.cn/cdsestorage/CUCloudDesktopClient_for_win_A.exe",
+        "https://obs-helf.cucloud.cn/cuc-terminal/common/ClientCommon_for_android.apk",
+        "https://obs-helf.cucloud.cn/cuc-terminal/CUCloudDesktopClient_for_android_A.apk",
+        "https://obs-helf.cucloud.cn/cdsestorage/CUCloudDesktopClient_for_mac_A.dmg"
+      ],
+      "uploadUrls": [],
+      "urlRotate": "sticky",
+      "switchPolicy": "failover"
+    },
+    {
+      "id": "cn-telecom",
+      "name": "中国电信 · 6源",
+      "group": "国内",
+      "desc": "天翼云电脑 Android / mac、天翼云桌面 Windows / Android，另加两条早期入口。入口常青、每次 307 现签 600 秒；HEAD 会 403，探测与取长度必须用 Range GET。",
+      "mode": "down",
+      "downloadUrls": [
+        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/bec260233776df5cd5b91c8e06b5f91e",
+        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/72aff953171791285acee2093d94c2b9",
+        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/98608b8c387dfeaf48698f514e3c657f",
+        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/60ce65c432988844fc137ccee4b14a7d",
+        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/5961fa22ee369eba433da6b0247eb11f",
+        "https://desk.ctyun.cn/desktop/software/clientsoftware/download/50218cd4d2286623049e374061cffd0e"
       ],
       "uploadUrls": [],
       "urlRotate": "sticky",
@@ -400,7 +452,7 @@
       "id": "cn-microsoft",
       "name": "微软 · .NET SDK 2源",
       "group": "国内",
-      "desc": "dotnet-sdk 8.0.404 211.9MB、9.0.100 212.8MB（azureedge，固定版本号）。2026-11 实测 6.9 / 9.4MB/s。原先的 VS Code 两条（update.code.visualstudio.com/latest/…）实测仅 0.5MB/s —— 它 302 到 vscode.download.prss.microsoft.com（Azure Front Door），国内出口绕得厉害，已剔除。",
+      "desc": "dotnet-sdk 8.0.404 211.9MB、9.0.100 212.8MB（azureedge，固定版本号）。原先的 VS Code 两条（update.code.visualstudio.com）国内绕 Azure Front Door，已删除。",
       "mode": "down",
       "downloadUrls": [
         "https://dotnetcli.azureedge.net/dotnet/Sdk/8.0.404/dotnet-sdk-8.0.404-win-x64.exe",
@@ -414,7 +466,7 @@
       "id": "cn-bilibili",
       "name": "B站 · 5源",
       "group": "国内",
-      "desc": "dl.hdslb.com 官方客户端：安卓 64 位 231MB、通用 183MB、macOS 182MB、安卓 HD 122MB、必剪 42MB。2026-11 单线程实测 6.3–12.6MB/s。mobile/latest 路径跟随版本自动更新，不用改清单。",
+      "desc": "dl.hdslb.com 官方客户端：安卓 64 位 231MB、通用 183MB、macOS 182MB、安卓 HD 122MB、必剪 42MB。mobile/latest 路径跟随版本，不会失效。",
       "mode": "down",
       "downloadUrls": [
         "https://dl.hdslb.com/mobile/latest/android64/iBiliPlayer-bili.apk",
@@ -455,7 +507,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国内",
-      "desc": "原神 5.5.0 每卷 10GB（腾讯 COS）、绝区零 3.2.0 每卷 7.4GB（字节 CDN）、星穹铁道 4.4.0 每卷 7.0GB。2026-11 实测原神 .002 9.4MB/s、.004 6.4MB/s，星铁 .001 18.8MB/s；.001/.003 复测 404（CDN 缓存不一致），只用 .002/.004。URL 带版本时间戳目录，更新即失效，用官方 API 重取：hyp-api.mihoyo.com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1",
+      "desc": "原神 5.5.0 每卷 10GB（腾讯 COS）、绝区零 3.2.0 每卷 7.4GB（字节 CDN）、星穹铁道 4.4.0 每卷 7.0GB。URL 带版本时间戳目录，游戏更新即失效，用官方 API 重取（见 README）。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -464,7 +516,7 @@
       "id": "cn-kuro",
       "name": "库洛 · 鸣潮 · 2源",
       "group": "国内",
-      "desc": "《鸣潮》3.7.1 PC 客户端 pak 分卷，AWS 节点 6.6GB / 5.2GB，2026-11 实测 10.1MB/s。腾讯云 0.11、火山 0.22、Akamai 0.76MB/s，均低于阈值已剔除。URL 带版本号，更新即失效，用启动器接口重取：prod-alicdn-gamestarter.kurogame.com/launcher/launcher/50004_obOHXFrFanqsaIEOmuKroCcbZkQRBC7c/G153/index.json",
+      "desc": "《鸣潮》3.7.1 PC 客户端 pak 分卷，AWS 节点 6.6GB / 5.2GB；腾讯云与火山引擎两条同源镜像已剔除。URL 带版本号与哈希，更新即失效，重取方法见 cloud/README.md。",
       "mode": "down",
       "downloadUrls": [
         "https://hw-pcdownload-aws.aki-game.net/launcher/game/G153/50004/3.7.1/GaUZSLrSAhPlLIGlqnOwBARuqhyqBKPA/zip/Client/Content/Paks/pakchunk0-WindowsNoEditor.pak",
@@ -480,7 +532,7 @@
       "id": "cn-wanmei",
       "name": "完美世界 · 客户端 1源",
       "group": "国内",
-      "desc": "《完美世界》完整客户端 rar，9.0GB，2026-11 实测 8.0MB/s。路径带日期（wanmei_20260910），官方发新版会换名，失效后去 world2.wanmei.com/download/index.shtml 取新地址",
+      "desc": "《完美世界》完整客户端 rar，9.0GB。路径带日期（wanmei_20260910），官方发新版会换名，失效后去 world2.wanmei.com/download/index.shtml 取新地址。",
       "mode": "down",
       "downloadUrls": [
         "https://world2dl.wmupd.com/wm/client/wanmei_20260910.rar"
@@ -495,7 +547,7 @@
       "id": "cn-netease",
       "name": "网易 · 逆水寒 1源",
       "group": "国内",
-      "desc": "《逆水寒》NGP 客户端 204MB，2026-11 实测 23.6MB/s（nsh.gdl.netease.com，openresty）。同域的《永劫无间》完整包 d90.gdl.netease.com 有 83GB 但带防盗链，直连返回 403，没收录",
+      "desc": "《逆水寒》NGP 客户端 204MB（nsh.gdl.netease.com，openresty）。同域《永劫无间》完整包有 83GB 但带防盗链，直连 403，没收录。",
       "mode": "down",
       "downloadUrls": [
         "https://nsh.gdl.netease.com/NGP/update/NGP_NSH_Official_zhCN_3.0.1563.exe"
@@ -518,23 +570,22 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国内",
-      "desc": "王者荣耀安装包 1968MB（腾讯 Lego CDN，自适应线路）、学习强国 APK 266MB（阿里 CDN，latest/ 路径不随版本变）、Apple IPSW 2975MB（金山/Akamai，http 明文）。2026-11 实测 5.1–15.8MB/s。WPS 安装包实测仅 0.10MB/s（金山 KS3 对本机出口限速），已剔除。王者荣耀另外三条三网定向域名实测不可用：联通 ml-dlied4 解析失败、移动 cdntips 哈希子域失败、电信 csy.tcdnos 回 418 风控",
+      "desc": "王者荣耀安装包 1968MB（腾讯 Lego CDN，自适应线路）、学习强国 APK 266MB（阿里 CDN，latest/ 路径不随版本变）、Apple IPSW 2975MB（金山/Akamai，http 明文）。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
     },
     {
       "id": "cn-app",
-      "name": "国内办公影音 · 7源",
+      "name": "国内办公影音 · 6源",
       "group": "国内",
-      "desc": "钉钉438 / 飞书349 / 搜狗206 / 搜狐142 / 咪咕108 / 360浏览器100 / 115浏览器57MB。阿里OSS·字节·腾讯COS·移动·搜狐自建，两轮实测 3.0–38MB/s。",
+      "desc": "钉钉438 / 飞书349 / 搜狗206 / 搜狐142 / 360浏览器100 / 115浏览器57MB。阿里OSS·字节·腾讯COS·搜狐自建；咪咕已移入 cn-cmcc。",
       "mode": "down",
       "downloadUrls": [
         "https://data.vod.itc.cn/foxd/gz?file=SoHuVA_7.3.2.0-c1000-x.exe&new=/189/65/We1PnKYLTaayc9F1SjKnlH.exe",
         "https://ime.gtimg.com/pc/sogou_pinyin_16.10.exe",
         "https://down.115.com/client/win/115br_25.0.6.5.exe",
         "https://dtapp-cast.dingtalk.com/202908242023/4090273bee39319286ee77436ca0b845/dingtalk-desktop/win_installer/Release/DingTalk_v8.2.0.260119001.exe",
-        "https://pcdown.miguvideo.com/MiguApi/download/MiguVideo4.16.0.510.exe",
         "https://sedl.360tpcdn.com/cse/360cse_23.0.1253.0.exe",
         "https://sf3-cn.feishucdn.com/obj/ee-appcenter/15d07312/Feishu-win32_x64-7.61.6-signed.exe"
       ],
@@ -546,7 +597,7 @@
       "id": "cn-mirror",
       "name": "国内开源镜像 · 6源",
       "group": "国内",
-      "desc": "华为云 spark382/netbeans486/eclipse331/torch850MB，腾讯云 hadoop929/gradle130MB。华为 ISO 路径被 WAF 伪 200（GET 418），只用 /apache/、/pypi/；阿里镜像仅 0.24MB/s 未收。两轮 7–41MB/s。",
+      "desc": "华为云 spark382/netbeans486/eclipse331/torch850MB，腾讯云 hadoop929/gradle130MB。华为 ISO 路径被 WAF 伪 200（GET 418），只用 /apache/、/pypi/ 直出路径。",
       "mode": "down",
       "downloadUrls": [
         "https://mirrors.huaweicloud.com/apache/spark/spark-3.5.3/spark-3.5.3-bin-hadoop3.tgz",
@@ -564,7 +615,7 @@
       "id": "cn-game-big",
       "name": "游戏大分卷 · 3源",
       "group": "国内",
-      "desc": "永劫无间补丁 3.3GB / 2.0GB（网易 d90，36–45MB/s）、雷霆手游整包 1.9GB（18–21MB/s）。单文件最大、适合长时段；补丁按日期命名会被清理，失效后从官网下载页重取。",
+      "desc": "永劫无间补丁 3.3GB / 2.0GB（网易 d90）、雷霆手游整包 1.9GB。单文件最大、适合长时段；补丁按日期命名会被清理，失效后从官网下载页重取。",
       "mode": "down",
       "downloadUrls": [
         "https://d90.gdl.netease.com/publish/patch_2025-08-22-14-00_2025-09-03-18-00.yjwjp",
@@ -585,7 +636,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "东京（DataPacket/CDN77 官方测速文件，单文件 9.5GB，http 明文，支持 Range）。2026-11 复测 0.16MB/s；香港 8.6s 无响应、新加坡 0.01MB/s，均已剔除。",
+      "desc": "东京（DataPacket/CDN77 官方测速文件，单文件 9.5GB，http 明文，支持 Range）。香港、新加坡两条在这条链路上不通，已剔除，只留东京。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -608,7 +659,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "法兰克福 / 阿姆斯特丹 / 伦敦 / 巴黎 / 马德里 / 布拉格 / 斯德哥尔摩 / 维也纳 / 华沙（DataPacket/CDN77 官方测速文件，单文件 9.5GB，http 明文，支持 Range）。2026-11 单线程复测 0.24–1.69MB/s，欧洲节点整体可用。",
+      "desc": "法兰克福 / 阿姆斯特丹 / 伦敦 / 巴黎 / 马德里 / 布拉格 / 斯德哥尔摩 / 维也纳 / 华沙（DataPacket/CDN77 官方测速文件，单文件 9.5GB，http 明文，支持 Range）。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -629,7 +680,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "洛杉矶 / 阿什本 / 纽约 / 芝加哥 / 达拉斯 / 迈阿密 / 亚特兰大（DataPacket/CDN77 官方测速文件，单文件 9.5GB，http 明文，支持 Range）。2026-11 单线程复测 0.04–0.51MB/s，跨太平洋链路波动大，作区域对照。",
+      "desc": "洛杉矶 / 阿什本 / 纽约 / 芝加哥 / 达拉斯 / 迈阿密 / 亚特兰大（DataPacket/CDN77 官方测速文件，单文件 9.5GB，http 明文，支持 Range）。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -648,7 +699,7 @@
       "downloadEndpoints": [],
       "uploadEndpoints": [],
       "group": "国外",
-      "desc": "OVH 格拉茨/俄勒冈/弗吉尼亚各 10GB、Hivelocity 法兰克福 10GiB、truefilesize 1GB（CC0 公共领域，明确声明可用于带宽饱和测试）。2026-11 单线程复测 0.06–0.50MB/s，属跨境出口瓶颈而非源故障，保留作低带宽对照。OVH 新加坡那条实测 0Mbps 已剔除",
+      "desc": "OVH 格拉茨/俄勒冈/弗吉尼亚各 10GB、Hivelocity 法兰克福 10GiB、truefilesize 1GB（CC0 公共领域，明确声明可用于带宽饱和测试）。",
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover"
@@ -701,13 +752,13 @@
       "mode": "down",
       "urlRotate": "sticky",
       "switchPolicy": "failover",
-      "desc": "garbage.php?ckSize=512 服务端实时生成 512MB 不可压缩随机流，no-store + keep-alive，不缓存也就不会「下载同一个文件被 CDN 优化」。实测单条 119Mbps，比 DataPacket 快 4 倍。不支持 Range（返回 200 全量），引擎会从头读、读完重连，正好是压测想要的持续流。ckSize 上限 1024MB"
+      "desc": "garbage.php?ckSize=512 服务端实时生成 512MB 不可压缩随机流，no-store + keep-alive，不缓存，也就不会出现「下载同一个文件被 CDN 优化」。"
     },
     {
       "id": "intl-mirror",
       "name": "海外镜像 · 2源",
       "group": "国外",
-      "desc": "15 条海外镜像/发布物两轮实测只留两条：Arch(Rackspace) 1.25GB 4.4–7.5MB/s、维基英文 dump 285MB 3.7MB/s；其余跨境低于 1MB/s，Firefox 与 Epic 第二轮崩到 0.02/0.16MB/s。",
+      "desc": "Arch 官方镜像（Rackspace，1.25GB）与维基英文 dump（285MB）。其余海外镜像与发布物在这条链路上不通，未收录。",
       "mode": "down",
       "downloadUrls": [
         "https://mirror.rackspace.com/archlinux/iso/latest/archlinux-x86_64.iso",
